@@ -7,10 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_user
 from app.api.v1.accounts import get_authorized_account_ids
 from app.core.database import get_db_session
-from app.models.base import FinancialContext
+from app.models.base import FinancialContext, UserRole
 from app.models.finance import Transaction, TransactionType
-from app.models.user import User
-from app.schemas.finance import TransactionListResponse, TransactionResponse
+from app.models.user import AccountPermission, User
+from app.schemas.finance import (
+    TransactionListResponse,
+    TransactionResponse,
+    TransactionUpdate,
+)
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -77,3 +81,73 @@ async def list_transactions(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/{id}", response_model=TransactionResponse)
+async def get_transaction(
+    id: uuid.UUID,
+    current_user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Consulta detalhes de uma transação específica."""
+    stmt = select(Transaction).where(Transaction.id == id)
+    result = await db.execute(stmt)
+    tx = result.scalar_one_or_none()
+
+    if not tx:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transação não encontrada.")
+
+    if current_user.role != UserRole.ADMIN:
+        perm_stmt = select(AccountPermission).where(
+            AccountPermission.user_id == current_user.id,
+            AccountPermission.account_id == tx.account_id,
+            AccountPermission.can_view == True,
+        )
+        perm = (await db.execute(perm_stmt)).scalar_one_or_none()
+        if not perm:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transação não encontrada.")
+
+    return TransactionResponse.model_validate(tx)
+
+
+@router.patch("/{id}", response_model=TransactionResponse)
+async def update_transaction(
+    id: uuid.UUID,
+    payload: TransactionUpdate,
+    current_user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Atualiza metadados editáveis da transação:
+    - category_id: classificação financeira
+    - context: Casa (HOUSEHOLD) ou Pessoal (PERSONAL)
+    - is_ignored_in_analytics: desconsidera em cálculos de orçamento/média
+    """
+    stmt = select(Transaction).where(Transaction.id == id)
+    result = await db.execute(stmt)
+    tx = result.scalar_one_or_none()
+
+    if not tx:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transação não encontrada.")
+
+    if current_user.role != UserRole.ADMIN:
+        perm_stmt = select(AccountPermission).where(
+            AccountPermission.user_id == current_user.id,
+            AccountPermission.account_id == tx.account_id,
+            AccountPermission.can_categorize == True,
+        )
+        perm = (await db.execute(perm_stmt)).scalar_one_or_none()
+        if not perm:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permissão insuficiente para categorizar transações desta conta.",
+            )
+
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, val in update_data.items():
+        setattr(tx, field, val)
+
+    await db.commit()
+    await db.refresh(tx)
+    return TransactionResponse.model_validate(tx)
+

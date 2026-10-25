@@ -73,3 +73,30 @@ class TransactionListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class TransactionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    category_id: Optional[uuid.UUID] = None
+    context: Optional[FinancialContext] = None
+    is_ignored_in_analytics: Optional[bool] = None
+
+
+class CategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    context: FinancialContext = FinancialContext.HOUSEHOLD
+    icon: Optional[str] = Field(default=None, max_length=50)
+    color: Optional[str] = Field(default=None, max_length=20)
+    parent_id: Optional[uuid.UUID] = None
+
+
+class CategoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    context: FinancialContext
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    parent_id: Optional[uuid.UUID] = None
+

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hub Financeiro — Conexão Pluggy Open Finance</title>
+  <script src="https://cdn.pluggy.ai/pluggy-connect.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --border: #334155;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+    .container {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-top: 0;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+    p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 24px;
+      line-height: 1.4;
+    }
+    .field {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      background-color: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      background-color: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      margin-top: 8px;
+    }
+    button:hover {
+      background-color: var(--primary-hover);
+    }
+    button:disabled {
+      background-color: #475569;
+      cursor: not-allowed;
+    }
+    .status-box {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      display: none;
+      line-height: 1.4;
+    }
+    .status-box.info {
+      background-color: rgba(59, 130, 246, 0.15);
+      border: 1px solid #3b82f6;
+      color: #93c5fd;
+      display: block;
+    }
+    .status-box.success {
+      background-color: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #6ee7b7;
+      display: block;
+    }
+    .status-box.error {
+      background-color: rgba(239, 68, 68, 0.15);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+      display: block;
+    }
+    .step-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      background-color: #334155;
+      font-size: 0.75rem;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="step-badge">Open Finance Hub</div>
+    <h1>Conectar Instituição</h1>
+    <p>Conecte contas bancárias ou corretoras (Nubank, Itaú, Rico) de forma segura através do widget oficial Pluggy.</p>
+
+    <div id="login-section">
+      <div class="field">
+        <label for="apiUrl">URL da API</label>
+        <input type="text" id="apiUrl" value="http://localhost:8000">
+      </div>
+      <div class="field">
+        <label for="email">E-mail (Admin)</label>
+        <input type="email" id="email" value="admin@exemplo.com">
+      </div>
+      <div class="field">
+        <label for="password">Senha</label>
+        <input type="password" id="password" value="">
+      </div>
+      <button id="btnLogin" onclick="login()">1. Autenticar Administrador</button>
+    </div>
+
+    <div id="connect-section" style="display: none;">
+      <p style="color: #6ee7b7; margin-bottom: 16px;">Autenticado com sucesso! Pronto para conectar.</p>
+      <button id="btnConnect" onclick="openConnectWidget()">2. Abrir Widget Pluggy Connect</button>
+    </div>
+
+    <div id="statusBox" class="status-box"></div>
+  </div>
+
+  <script>
+    let accessToken = null;
+
+    function showStatus(text, type = "info") {
+      const box = document.getElementById("statusBox");
+      box.className = `status-box ${type}`;
+      box.innerText = text;
+    }
+
+    async function login() {
+      const apiUrl = document.getElementById("apiUrl").value.replace(/\/$/, "");
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      if (!password) {
+        showStatus("Por favor, informe a senha do Administrador.", "error");
+        return;
+      }
+
+      showStatus("Autenticando...", "info");
+      try {
+        const resp = await fetch(`${apiUrl}/api/v1/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.detail || `Erro ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        accessToken = data.access_token;
+        document.getElementById("login-section").style.display = "none";
+        document.getElementById("connect-section").style.display = "block";
+        showStatus("Sessão autenticada. Clique no botão abaixo para abrir o widget.", "success");
+      } catch (err) {
+        showStatus(`Falha no login: ${err.message}`, "error");
+      }
+    }
+
+    async function openConnectWidget() {
+      const apiUrl = document.getElementById("apiUrl").value.replace(/\/$/, "");
+      showStatus("Emitindo Connect Token seguro...", "info");
+
+      try {
+        const tokenResp = await fetch(`${apiUrl}/api/v1/connections/connect-token`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          }
+        });
+
+        if (!tokenResp.ok) {
+          const err = await tokenResp.json().catch(() => ({}));
+          throw new Error(err.detail || `Erro ao emitir token (${tokenResp.status})`);
+        }
+
+        const tokenData = await tokenResp.json();
+        const connectToken = tokenData.connect_token;
+
+        showStatus("Abrindo widget Pluggy Connect...", "info");
+
+        const pluggyConnect = new PluggyConnect({
+          connectToken: connectToken,
+          includeSandbox: true,
+          onSuccess: async (itemData) => {
+            console.log("Pluggy onSuccess:", itemData);
+            showStatus(`Instituição conectada! Registrando item ${itemData.item.id}...`, "info");
+
+            try {
+              // 1. Concluir conexão na API
+              const compResp = await fetch(`${apiUrl}/api/v1/connections/complete`, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${accessToken}`,
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ item_id: itemData.item.id })
+              });
+
+              if (!compResp.ok) {
+                const compErr = await compResp.json().catch(() => ({}));
+                throw new Error(compErr.detail || "Falha ao registrar conexão.");
+              }
+
+              const connection = await compResp.json();
+              showStatus(`Conexão ${connection.institution_name} criada! Executando primeira sincronização...`, "info");
+
+              // 2. Disparar sincronização inicial
+              const syncResp = await fetch(`${apiUrl}/api/v1/connections/${connection.id}/sync`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${accessToken}` }
+              });
+
+              if (syncResp.ok) {
+                const syncData = await syncResp.json();
+                showStatus(
+                  `Sucesso! Conexão sincronizada. ${syncData.records_inserted} registros inseridos. Verifique as contas no Dashboard.`,
+                  "success"
+                );
+              } else {
+                showStatus("Conexão registrada com sucesso! A sincronização em segundo plano cuidará da extração inicial.", "success");
+              }
+            } catch (syncErr) {
+              showStatus(`Erro ao salvar conexão: ${syncErr.message}`, "error");
+            }
+          },
+          onError: (error) => {
+            console.error("Pluggy onError:", error);
+            showStatus(`Erro no widget: ${error.message || JSON.stringify(error)}`, "error");
+          },
+          onClose: () => {
+            console.log("Widget fechado pelo usuário.");
+          }
+        });
+
+        pluggyConnect.init();
+
+      } catch (err) {
+        showStatus(`Erro: ${err.message}`, "error");
+      }
+    }
+  </script>
+</body>
+</html>
