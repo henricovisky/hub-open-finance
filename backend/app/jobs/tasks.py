@@ -50,10 +50,14 @@ async def run_scheduled_sync():
 
 async def run_daily_reconciliation():
     """
-    Job diário de reconciliação (03:00) para cobrir possíveis eventos de webhooks perdidos.
+    Job diário de reconciliação (03:00) para cobrir possíveis eventos de webhooks perdidos
+    e atualizar os snapshots patrimoniais consolidados.
     """
     logger.info("Iniciando rotina diária de reconciliação...")
     await run_scheduled_sync()
+    async with async_session_factory() as db_session:
+        await SyncService.generate_daily_wealth_snapshot(db_session)
+    logger.info("Rotina diária de reconciliação e snapshots concluída.")
 
 
 async def run_cleanup_expired_data():

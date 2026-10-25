@@ -16,6 +16,15 @@ from app.models.finance import (
     TransactionStatus,
     TransactionType,
 )
+from app.models.investment import (
+    AssetClass,
+    Bill,
+    BillStatus,
+    Investment,
+    InvestmentTransaction,
+    WealthSnapshot,
+    WealthSnapshotItem,
+)
 from app.models.user import (
     AccountPermission,
     AuditLog,
@@ -48,6 +57,13 @@ __all__ = [
     "Transaction",
     "TransactionType",
     "TransactionStatus",
+    "Bill",
+    "BillStatus",
+    "AssetClass",
+    "Investment",
+    "InvestmentTransaction",
+    "WealthSnapshot",
+    "WealthSnapshotItem",
     "WebhookEvent",
     "WebhookEventStatus",
 ]

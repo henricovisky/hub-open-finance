@@ -114,7 +114,7 @@ async def test_sync_connection_and_idempotency(async_client: AsyncClient, test_d
         accounts = accs_resp.json()
         assert len(accounts) == 1
         assert accounts[0]["pluggy_account_id"] == account_id
-        assert accounts[0]["current_balance"] == "2500.50"
+        assert Decimal(str(accounts[0]["current_balance"])) == Decimal("2500.50")
 
         # 4. Validar listagem de transações (exatamente 2 no total)
         txs_resp = await async_client.get(

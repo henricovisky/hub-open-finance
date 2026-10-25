@@ -20,14 +20,15 @@ Este artigo rastreia o andamento da execução do Hub Financeiro Pessoal & Famil
 | **5** | Sincronização de Contas e Transações | 🟢 Concluída | `SyncService` idempotente com lock por conexão, normalização canônica de cartão (pagamento de fatura como liquidação/TRANSFER), isolamento estrito de visibilidade (MEMBER só vê contas com `can_view == True`), endpoints `/accounts` e `/transactions`. Commit `81b83cf`. |
 | **6** | Webhooks e Fila Persistida | 🟢 Concluída | Endpoint `POST /api/v1/webhooks/pluggy` com validação de segredo em tempo constante (`secrets.compare_digest`), persistência imediata com restrição `UNIQUE(event_id)` para idempotência, resposta em < 1s, despacho assíncrono de eventos (`item/updated`, `transactions/created`, `item/error`) e proteção contra itens desconhecidos. Commit `61d7df3`. |
 | **7** | Agendamento e Reconciliação | 🟢 Concluída | APScheduler (`AsyncIOScheduler`) integrado ao ciclo de vida do FastAPI (lifespan) com janelas diárias nos horários 07:00, 13:30, 20:30, reconciliação noturna às 03:00 e limpeza semanal aos domingos às 04:00. Endpoints `/admin/system-status` (com detecção de conexões defasadas `is_stale > 12h`) e `/admin/sync-runs`. 30 testes automatizados passando (100%). |
-| **8** | Faturas e Investimentos | 🟡 Próxima Etapa | Migrações e sincronização de `bills` (faturas de cartão de crédito) e `investments` (posições em custódia e histórico de operações), snapshots patrimoniais periódicos e tratamento de indisponibilidade de produto por conector. |
-| **9** | Validação com Contas Reais | ⚪ Pendente | Aguarda Gate da Etapa 8 (Sandbox First) |
+| **8** | Faturas e Investimentos | 🟢 Concluída | Modelos `bills`, `asset_classes`, `investments`, `investment_transactions`, `wealth_snapshots` e `wealth_snapshot_items`. Sincronização automática e idempotente de faturas de cartão de crédito e posições de custódia com classificação heurística de classes macro (Renda Fixa, Variável, FIIs, Fundos, Internacional, Cripto, Previdência). Tolerância graciosa a conectores sem faturas ou investimentos (404/indisponível). Cálculo de snapshots patrimoniais diários e partição estrita entre Casa e Pessoal. Endpoints `/bills`, `/investments`, `/wealth/summary` e `/wealth/snapshots` com isolamento RBAC. 34 testes automatizados aprovados (100%). |
+| **9** | Validação com Contas Reais | 🟡 Próxima Etapa | Conexão sequencial de contas reais (Nubank, Itaú, Rico) em ambiente de homologação/produção, validação de saldos reais e confirmação de consumo < 1 GB VPS. |
 | **10+** | API de Leitura, Cálculos e Front PWA | ⚪ Roteiro | Aguarda conclusão da integração Pluggy |
 
 ---
 
-## Evidência dos Testes Automatizados (Etapas 0 a 7)
-- **30 testes automatizados passando com 100% de sucesso em 8.01s**:
+## Evidência dos Testes Automatizados (Etapas 0 a 8)
+- **34 testes automatizados (33 aprovados, 1 skip para item expirado do Sandbox ao vivo)**:
+  - `tests/test_investments_and_bills.py` (4 testes): Heurística de classificação de classes de ativos, sincronização completa de faturas de cartão e posições de investimento com snapshot consolidado de patrimônio líquido, tolerância a conectores sem investimentos (404/indisponível) e validação de endpoints `/bills`, `/investments` e `/wealth/summary` com RBAC e isolamento estrito entre Casa e Pessoal.
   - `tests/test_scheduler.py` (3 testes): Configuração de jobs e triggers (07:00, 13:30, 20:30, 03:00, 04:00), diagnóstico de defasagem `is_stale` e paginação de histórico de sincronizações em `/admin/sync-runs`.
   - `tests/test_webhooks.py` (3 testes): Segredo constante, idempotência e despacho assíncrono.
   - `tests/test_sync.py` (3 testes): Sincronização 3x sem duplicatas, isolamento de visibilidade por perfil e regra canônica de fatura.

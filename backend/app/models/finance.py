@@ -77,6 +77,8 @@ class Account(Base, TimestampMixin):
         back_populates="account",
         cascade="all, delete-orphan",
     )
+    bills = relationship("Bill", back_populates="account", cascade="all, delete-orphan")
+    investments = relationship("Investment", back_populates="account", cascade="all, delete-orphan")
 
 
 class Card(Base, TimestampMixin):
@@ -102,6 +104,7 @@ class Card(Base, TimestampMixin):
     available_limit: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
 
     account: Mapped["Account"] = relationship("Account", back_populates="card")
+    bills = relationship("Bill", back_populates="card")
 
 
 class Category(Base, TimestampMixin):
