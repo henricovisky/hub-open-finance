@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Hub Financeiro</title>
+  
+  <!-- PWA & Meta Tags -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#090D16">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              bg: '#090D16',
+              card: '#111827',
+              border: '#1F2937',
+              accent: '#3B82F6',
+              muted: '#94A3B8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Pluggy Connect Widget SDK -->
+  <script src="https://cdn.pluggy.ai/pluggy-connect.js"></script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/css/style.css">
+
+  <!-- Alpine.js & API -->
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+</head>
+<body class="bg-[#090D16] text-slate-100 min-h-screen flex justify-center font-sans antialiased select-none" x-data="hubApp">
+
+  <!-- App Wrapper (Centrado no Desktop, 100% no Mobile 360-480px) -->
+  <div class="w-full max-w-md min-h-screen bg-[#090D16] flex flex-col relative shadow-2xl border-x border-[#1F2937]/40 pb-20">
+
+    <!-- ==================== TELA DE LOGIN ==================== -->
+    <template x-if="!isAuthenticated">
+      <div class="flex-1 flex flex-col justify-center px-6 py-12">
+        <div class="mb-8 text-center">
+          <div class="w-16 h-16 bg-blue-600/20 border border-blue-500/40 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
+            <i data-lucide="wallet" class="w-8 h-8 text-blue-500"></i>
+          </div>
+          <h1 class="text-2xl font-bold tracking-tight text-white">Hub Financeiro</h1>
+          <p class="text-sm text-slate-400 mt-1">Gestão patrimonial familiar com Open Finance</p>
+        </div>
+
+        <div class="bg-[#111827] border border-[#1F2937] rounded-2xl p-6 shadow-xl space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">E-MAIL</label>
+            <input type="email" x-model="loginEmail" placeholder="admin@exemplo.com"
+              class="w-full bg-[#090D16] border border-[#1F2937] focus:border-blue-500 rounded-xl px-4 py-3 text-sm text-white focus:outline-none transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">SENHA</label>
+            <input type="password" x-model="loginPassword" placeholder="••••••••" @keyup.enter="doLogin"
+              class="w-full bg-[#090D16] border border-[#1F2937] focus:border-blue-500 rounded-xl px-4 py-3 text-sm text-white focus:outline-none transition-colors">
+          </div>
+
+          <template x-if="loginError">
+            <p class="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg p-2.5" x-text="loginError"></p>
+          </template>
+
+          <button @click="doLogin" :disabled="loginLoading"
+            class="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:bg-slate-700 text-white font-medium py-3 rounded-xl text-sm transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
+            <template x-if="loginLoading">
+              <span class="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+            </template>
+            <span x-text="loginLoading ? 'Entrando...' : 'Acessar Plataforma'"></span>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- ==================== CONTEÚDO AUTENTICADO ==================== -->
+    <template x-if="isAuthenticated">
+      <div class="flex-1 flex flex-col">
+
+        <!-- HEADER FIXO MOBILE -->
+        <header class="sticky top-0 z-30 glass-header border-b border-[#1F2937] px-4 pt-3 pb-2.5">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 bg-blue-600/20 border border-blue-500/30 rounded-lg flex items-center justify-center">
+                <i data-lucide="shield-check" class="w-4 h-4 text-blue-400"></i>
+              </div>
+              <span class="text-sm font-semibold tracking-wide text-white">Hub Financeiro</span>
+            </div>
+
+            <!-- Controles do Topo (Olho para ocultar valores e status) -->
+            <div class="flex items-center gap-2">
+              <button @click="toggleHideValues" class="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors" title="Ocultar/Exibir valores">
+                <span x-text="hideValues ? '🙈' : '👁️'"></span>
+              </button>
+              <button @click="refreshAll" class="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors" title="Atualizar">
+                <i data-lucide="refresh-cw" :class="{'animate-spin text-blue-400': loading}" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- SELETOR DE CONTEXTO: CASA vs PESSOAL -->
+          <div class="flex bg-[#090D16] p-1 rounded-xl border border-[#1F2937]">
+            <button @click="setContext('HOUSEHOLD')"
+              :class="currentContext === 'HOUSEHOLD' ? 'bg-blue-600 text-white font-medium shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+              class="flex-1 py-1.5 text-xs rounded-lg transition-all flex items-center justify-center gap-1.5">
+              <span>🏠</span> Casa
+            </button>
+            <template x-if="currentUser?.role === 'ADMIN'">
+              <button @click="setContext('PERSONAL')"
+                :class="currentContext === 'PERSONAL' ? 'bg-blue-600 text-white font-medium shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                class="flex-1 py-1.5 text-xs rounded-lg transition-all flex items-center justify-center gap-1.5">
+                <span>👤</span> Pessoal
+              </button>
+            </template>
+            <template x-if="currentUser?.role === 'ADMIN'">
+              <button @click="setContext('ALL')"
+                :class="currentContext === 'ALL' ? 'bg-blue-600 text-white font-medium shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                class="flex-1 py-1.5 text-xs rounded-lg transition-all flex items-center justify-center gap-1.5">
+                <span>🌐</span> Todos
+              </button>
+            </template>
+          </div>
+        </header>
+
+        <!-- CORPO PRINCIPAL COM SCROLL -->
+        <main class="flex-1 px-4 py-4 space-y-4 overflow-y-auto no-scrollbar">
+
+          <!-- ==================== TAB 1: DASHBOARD ==================== -->
+          <div x-show="activeTab === 'dashboard'" class="space-y-4">
+            
+            <!-- HERO CARD: SALDO LÍQUIDO & PATRIMÔNIO -->
+            <div class="bg-gradient-to-br from-[#1E293B] to-[#0F172A] border border-[#334155] rounded-2xl p-5 shadow-lg relative overflow-hidden">
+              <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+                <span>Saldo Líquido Disponível</span>
+                <span class="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-medium">Contas e Caixas</span>
+              </div>
+              <div class="text-3xl font-bold tracking-tight text-white mb-3" x-text="formatMoney(overview?.liquid_balance)"></div>
+
+              <div class="pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs">
+                <div>
+                  <span class="text-slate-400 block text-[11px]">Patrimônio Líquido</span>
+                  <span class="text-violet-400 font-semibold" x-text="formatMoney(overview?.net_worth)"></span>
+                </div>
+                <div class="text-right">
+                  <span class="text-slate-400 block text-[11px]">Faturas a Vencer</span>
+                  <span class="text-rose-400 font-semibold" x-text="formatMoney(overview?.pending_bills_amount)"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- GRID FLUXO DO MÊS: ENTRADAS vs SAÍDAS -->
+            <div class="grid grid-cols-2 gap-3">
+              <!-- Entradas -->
+              <div class="bg-[#111827] border border-[#1F2937] rounded-xl p-3.5">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs text-slate-400">Entradas</span>
+                  <span class="text-emerald-400 text-xs">↓</span>
+                </div>
+                <div class="text-lg font-bold text-emerald-400" x-text="formatMoney(overview?.monthly_income)"></div>
+                <div class="text-[10px] text-slate-500 mt-1">
+                  Média 3M: <span x-text="formatMoney(overview?.three_month_avg_income)"></span>
+                </div>
+              </div>
+
+              <!-- Saídas -->
+              <div class="bg-[#111827] border border-[#1F2937] rounded-xl p-3.5">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs text-slate-400">Saídas</span>
+                  <span class="text-rose-400 text-xs">↑</span>
+                </div>
+                <div class="text-lg font-bold text-rose-400" x-text="formatMoney(overview?.monthly_expenses)"></div>
+                <div class="text-[10px] text-slate-500 mt-1">
+                  Média 3M: <span x-text="formatMoney(overview?.three_month_avg_expenses)"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- EVOLUÇÃO MENSAL (CASHFLOW ÚLTIMOS MESES) -->
+            <div class="bg-[#111827] border border-[#1F2937] rounded-xl p-4">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Fluxo Mensal Realizado</h3>
+                <span class="text-[10px] text-slate-500">Últimos meses</span>
+              </div>
+              <div class="space-y-2.5">
+                <template x-for="item in cashflow" :key="item.month">
+                  <div class="text-xs">
+                    <div class="flex justify-between text-slate-300 mb-1">
+                      <span class="font-medium" x-text="item.month"></span>
+                      <span :class="item.net >= 0 ? 'text-emerald-400' : 'text-rose-400'" x-text="formatMoney(item.net)"></span>
+                    </div>
+                    <div class="flex h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                      <div class="bg-emerald-500 h-full" :style="`width: ${Math.min(100, Math.max(10, item.income / (item.income + item.expenses || 1) * 100))}%`"></div>
+                      <div class="bg-rose-500 h-full" :style="`width: ${Math.min(100, Math.max(10, item.expenses / (item.income + item.expenses || 1) * 100))}%`"></div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- DESPESAS POR CATEGORIA DO MÊS -->
+            <div class="bg-[#111827] border border-[#1F2937] rounded-xl p-4">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Top Despesas por Categoria</h3>
+                <span class="text-[10px] text-slate-500">vs Média 3M</span>
+              </div>
+              <template x-if="categoriesSummary.length === 0">
+                <p class="text-xs text-slate-500 py-2 text-center">Nenhuma despesa categorizada neste mês.</p>
+              </template>
+              <div class="space-y-3">
+                <template x-for="cat in categoriesSummary" :key="cat.category_name">
+                  <div>
+                    <div class="flex items-center justify-between text-xs mb-1">
+                      <div class="flex items-center gap-1.5 truncate">
+                        <span class="w-2 h-2 rounded-full" :style="`background-color: ${cat.color || '#3B82F6'}`"></span>
+                        <span class="text-slate-200 truncate" x-text="cat.category_name"></span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="font-medium text-slate-100" x-text="formatMoney(cat.total_amount)"></span>
+                        <template x-if="cat.variation_vs_avg_pct !== null">
+                          <span :class="cat.variation_vs_avg_pct > 0 ? 'text-rose-400' : 'text-emerald-400'" class="text-[10px] font-semibold">
+                            <span x-text="cat.variation_vs_avg_pct > 0 ? '+' : ''"></span><span x-text="cat.variation_vs_avg_pct"></span>%
+                          </span>
+                        </template>
+                      </div>
+                    </div>
+                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div class="h-full rounded-full" :style="`width: ${cat.percentage}%; background-color: ${cat.color || '#3B82F6'}`"></div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ==================== TAB 2: CONTAS & CARTÕES ==================== -->
+          <div x-show="activeTab === 'accounts'" class="space-y-4">
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="text-sm font-semibold text-white">Instituições & Contas</h2>
+              <span class="text-xs text-slate-400" x-text="`${accounts.length} contas ativas`"></span>
+            </div>
+
+            <!-- LISTA DE CONTAS -->
+            <div class="space-y-3">
+              <template x-for="acc in accounts" :key="acc.id">
+                <div class="bg-[#111827] border border-[#1F2937] hover:border-slate-700 rounded-xl p-4 transition-all">
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <div class="flex items-center gap-1.5 mb-0.5">
+                        <span class="text-sm font-semibold text-white" x-text="acc.name"></span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                          :class="acc.owner_context === 'HOUSEHOLD' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'"
+                          x-text="acc.owner_context === 'HOUSEHOLD' ? 'Casa' : 'Pessoal'"></span>
+                      </div>
+                      <span class="text-xs text-slate-400" x-text="acc.type === 'CREDIT' ? 'Cartão de Crédito' : (acc.type === 'INVESTMENT' ? 'Conta Investimento' : 'Conta Corrente')"></span>
+                    </div>
+
+                    <template x-if="currentUser?.role === 'ADMIN'">
+                      <button @click="openEditAccount(acc)" class="text-xs text-slate-500 hover:text-blue-400 p-1">
+                        <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+                      </button>
+                    </template>
+                  </div>
+
+                  <div class="mt-3 flex items-baseline justify-between">
+                    <span class="text-xs text-slate-400">Saldo Atual</span>
+                    <span class="text-lg font-bold text-white" x-text="formatMoney(acc.current_balance)"></span>
+                  </div>
+
+                  <!-- Se for Cartão, exibe limites -->
+                  <template x-if="acc.card">
+                    <div class="mt-2.5 pt-2.5 border-t border-slate-800 flex justify-between text-[11px] text-slate-400">
+                      <span>Limite Disponível: <strong class="text-emerald-400" x-text="formatMoney(acc.card.available_limit)"></strong></span>
+                      <span>Total: <span x-text="formatMoney(acc.card.limit_amount)"></span></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- FATURAS DE CARTÃO -->
+            <template x-if="bills.length > 0">
+              <div class="mt-6 space-y-3">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Faturas de Cartão</h3>
+                <div class="space-y-2">
+                  <template x-for="bill in bills" :key="bill.id">
+                    <div class="bg-[#111827] border border-[#1F2937] rounded-xl p-3 flex items-center justify-between text-xs">
+                      <div>
+                        <span class="font-medium text-white block" x-text="bill.account_name || 'Cartão'"></span>
+                        <span class="text-[10px] text-slate-400" x-text="`Vencimento: ${formatDate(bill.due_date)}`"></span>
+                      </div>
+                      <div class="text-right">
+                        <span class="font-bold text-rose-400 block" x-text="formatMoney(bill.total_amount)"></span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded font-medium inline-block mt-0.5"
+                          :class="bill.status === 'PAID' ? 'bg-emerald-500/20 text-emerald-400' : (bill.status === 'OPEN' ? 'bg-amber-500/20 text-amber-400' : 'bg-rose-500/20 text-rose-400')"
+                          x-text="bill.status"></span>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- ==================== TAB 3: EXTRATO (TRANSAÇÕES) ==================== -->
+          <div x-show="activeTab === 'transactions'" class="space-y-3">
+            <div class="flex items-center justify-between mb-1">
+              <h2 class="text-sm font-semibold text-white">Extrato Consolidado</h2>
+              <span class="text-xs text-slate-400" x-text="`${transactions.length} lançamentos`"></span>
+            </div>
+
+            <template x-if="transactions.length === 0">
+              <div class="text-center py-12 text-slate-500 text-xs">
+                Nenhuma movimentação encontrada para o contexto selecionado.
+              </div>
+            </template>
+
+            <div class="space-y-2">
+              <template x-for="tx in transactions" :key="tx.id">
+                <div @click="openEditTx(tx)"
+                  class="bg-[#111827] hover:bg-[#161F30] border border-[#1F2937] rounded-xl p-3 flex items-center justify-between cursor-pointer transition-colors active:scale-[0.99]">
+                  
+                  <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                      :class="tx.type === 'INCOME' ? 'bg-emerald-500/20 text-emerald-400' : (tx.type === 'TRANSFER' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-300')">
+                      <span x-text="tx.type === 'INCOME' ? '↓' : (tx.type === 'TRANSFER' ? '⇄' : '↑')"></span>
+                    </div>
+
+                    <div class="truncate">
+                      <span class="text-xs font-medium text-white truncate block" x-text="tx.description"></span>
+                      <div class="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                        <span x-text="formatDate(tx.date)"></span>
+                        <span>•</span>
+                        <span class="truncate" x-text="tx.provider_category || 'Geral'"></span>
+                        <template x-if="tx.is_ignored_in_analytics">
+                          <span class="text-[9px] bg-slate-800 px-1 rounded text-slate-400">Ignorada</span>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="text-right shrink-0 ml-2">
+                    <span class="text-xs font-bold block"
+                      :class="tx.type === 'INCOME' ? 'text-emerald-400' : (tx.type === 'TRANSFER' ? 'text-blue-400' : 'text-slate-100')"
+                      x-text="(tx.type === 'INCOME' ? '+ ' : (tx.type === 'EXPENSE' ? '- ' : '')) + formatMoney(Math.abs(tx.amount))"></span>
+                    <span class="text-[9px] font-medium px-1 rounded"
+                      :class="tx.context === 'HOUSEHOLD' ? 'text-blue-400' : 'text-purple-400'"
+                      x-text="tx.context === 'HOUSEHOLD' ? 'Casa' : 'Pessoal'"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- ==================== TAB 4: INVESTIMENTOS ==================== -->
+          <div x-show="activeTab === 'investments'" class="space-y-4">
+            <div class="bg-gradient-to-br from-violet-950/40 to-[#111827] border border-violet-900/40 rounded-2xl p-5 shadow-lg">
+              <span class="text-xs text-violet-300 block mb-1">Patrimônio Líquido Total</span>
+              <div class="text-3xl font-bold text-white mb-2" x-text="formatMoney(wealthSummary?.net_worth)"></div>
+              <div class="flex justify-between text-xs text-slate-400 pt-2 border-t border-violet-900/30">
+                <span>Investimentos: <strong class="text-slate-200" x-text="formatMoney(wealthSummary?.investment_balance)"></strong></span>
+                <span>Dinheiro: <strong class="text-slate-200" x-text="formatMoney(wealthSummary?.cash_balance)"></strong></span>
+              </div>
+            </div>
+
+            <!-- ALOCAÇÃO DE ATIVOS -->
+            <template x-if="wealthSummary?.asset_allocation?.length > 0">
+              <div class="bg-[#111827] border border-[#1F2937] rounded-xl p-4 space-y-3">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Alocação por Classe</h3>
+                <div class="space-y-2.5">
+                  <template x-for="item in wealthSummary.asset_allocation" :key="item.asset_class_code">
+                    <div class="text-xs">
+                      <div class="flex justify-between text-slate-300 mb-1">
+                        <span class="font-medium" x-text="item.asset_class_name"></span>
+                        <div class="flex gap-2">
+                          <span x-text="formatMoney(item.balance)"></span>
+                          <span class="text-slate-500 font-semibold" x-text="`${item.percentage}%`"></span>
+                        </div>
+                      </div>
+                      <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div class="bg-violet-500 h-full rounded-full" :style="`width: ${item.percentage}%`"></div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- LISTA DE ATIVOS EM CUSTÓDIA -->
+            <div class="space-y-2.5">
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Ativos em Custódia</h3>
+              <template x-if="investments.length === 0">
+                <p class="text-xs text-slate-500 py-6 text-center">Nenhum ativo de investimento cadastrado.</p>
+              </template>
+              <template x-for="inv in investments" :key="inv.id">
+                <div class="bg-[#111827] border border-[#1F2937] rounded-xl p-3 flex items-center justify-between text-xs">
+                  <div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-semibold text-white" x-text="inv.code || inv.name"></span>
+                      <span class="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.5 rounded font-medium" x-text="inv.asset_class_code || inv.type"></span>
+                    </div>
+                    <span class="text-[11px] text-slate-400 truncate block mt-0.5" x-text="inv.name"></span>
+                  </div>
+                  <div class="text-right">
+                    <span class="font-bold text-white block" x-text="formatMoney(inv.balance)"></span>
+                    <span class="text-[10px] text-emerald-400 font-medium" x-text="inv.rate ? `${inv.rate}% ${inv.rate_type || ''}` : 'Ativo'"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- ==================== TAB 5: AJUSTES & CONEXÕES ==================== -->
+          <div x-show="activeTab === 'settings'" class="space-y-4">
+            <!-- CARTÃO DO USUÁRIO -->
+            <div class="bg-[#111827] border border-[#1F2937] rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <span class="text-xs text-slate-400 block">Usuário Conectado</span>
+                <span class="text-sm font-semibold text-white" x-text="currentUser?.name"></span>
+                <span class="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-medium inline-block mt-1" x-text="currentUser?.role"></span>
+              </div>
+              <button @click="doLogout" class="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs rounded-lg transition-colors border border-rose-500/20">
+                Sair
+              </button>
+            </div>
+
+            <!-- GERENCIAMENTO DE CONEXÕES OPEN FINANCE -->
+            <div class="bg-[#111827] border border-[#1F2937] rounded-xl p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Conexões Open Finance</h3>
+                  <span class="text-[10px] text-slate-500">Nubank, Itaú, Rico e outros</span>
+                </div>
+                <template x-if="currentUser?.role === 'ADMIN'">
+                  <button @click="addConnModal.open = true" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">
+                    + Conectar
+                  </button>
+                </template>
+              </div>
+
+              <template x-if="connections.length === 0">
+                <p class="text-xs text-slate-500 py-4 text-center">Nenhuma instituição financeira conectada.</p>
+              </template>
+
+              <div class="space-y-2">
+                <template x-for="c in connections" :key="c.id">
+                  <div class="bg-[#090D16] border border-[#1F2937] rounded-lg p-3 text-xs flex items-center justify-between">
+                    <div>
+                      <span class="font-semibold text-white block" x-text="c.institution_name"></span>
+                      <span class="text-[10px] text-slate-400" x-text="`Última sync: ${formatDateTime(c.last_sync_at)}`"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                        :class="c.status === 'CONNECTED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'"
+                        x-text="c.status"></span>
+                      <template x-if="currentUser?.role === 'ADMIN'">
+                        <button @click="triggerSync(c.id)" class="text-slate-400 hover:text-white p-1" title="Sincronizar agora">
+                          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        </button>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
+        </main>
+
+        <!-- ==================== BARRA DE NAVEGAÇÃO INFERIOR (BOTTOM NAV) ==================== -->
+        <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto glass-nav border-t border-[#1F2937] flex justify-around items-center py-2 px-1 z-30">
+          <!-- Tab 1 -->
+          <button @click="setTab('dashboard')"
+            :class="activeTab === 'dashboard' ? 'text-blue-500' : 'text-slate-400 hover:text-slate-200'"
+            class="flex flex-col items-center gap-1 flex-1 py-1 transition-colors">
+            <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+            <span class="text-[10px] font-medium">Início</span>
+          </button>
+
+          <!-- Tab 2 -->
+          <button @click="setTab('accounts')"
+            :class="activeTab === 'accounts' ? 'text-blue-500' : 'text-slate-400 hover:text-slate-200'"
+            class="flex flex-col items-center gap-1 flex-1 py-1 transition-colors">
+            <i data-lucide="credit-card" class="w-5 h-5"></i>
+            <span class="text-[10px] font-medium">Contas</span>
+          </button>
+
+          <!-- Tab 3 -->
+          <button @click="setTab('transactions')"
+            :class="activeTab === 'transactions' ? 'text-blue-500' : 'text-slate-400 hover:text-slate-200'"
+            class="flex flex-col items-center gap-1 flex-1 py-1 transition-colors">
+            <i data-lucide="receipt" class="w-5 h-5"></i>
+            <span class="text-[10px] font-medium">Extrato</span>
+          </button>
+
+          <!-- Tab 4 -->
+          <button @click="setTab('investments')"
+            :class="activeTab === 'investments' ? 'text-blue-500' : 'text-slate-400 hover:text-slate-200'"
+            class="flex flex-col items-center gap-1 flex-1 py-1 transition-colors">
+            <i data-lucide="trending-up" class="w-5 h-5"></i>
+            <span class="text-[10px] font-medium">Investir</span>
+          </button>
+
+          <!-- Tab 5 -->
+          <button @click="setTab('settings')"
+            :class="activeTab === 'settings' ? 'text-blue-500' : 'text-slate-400 hover:text-slate-200'"
+            class="flex flex-col items-center gap-1 flex-1 py-1 transition-colors">
+            <i data-lucide="sliders" class="w-5 h-5"></i>
+            <span class="text-[10px] font-medium">Ajustes</span>
+          </button>
+        </nav>
+
+        <!-- ==================== MODAL / DRAWER: EDITAR TRANSAÇÃO ==================== -->
+        <template x-if="editTxModal.open">
+          <div class="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+            <div @click.away="editTxModal.open = false" class="bg-[#111827] border-t border-[#1F2937] w-full max-w-md rounded-t-2xl p-5 space-y-4 shadow-2xl">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h3 class="text-sm font-semibold text-white">Editar Transação</h3>
+                <button @click="editTxModal.open = false" class="text-slate-400 hover:text-white p-1">✕</button>
+              </div>
+
+              <div>
+                <span class="text-xs text-slate-400 block" x-text="editTxModal.tx?.description"></span>
+                <span class="text-lg font-bold text-white block mt-0.5" x-text="formatMoney(editTxModal.tx?.amount)"></span>
+              </div>
+
+              <!-- Categoria -->
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">CATEGORIA</label>
+                <select x-model="editTxModal.categoryId" class="w-full bg-[#090D16] border border-[#1F2937] rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none">
+                  <option value="">Sem categoria</option>
+                  <template x-for="cat in categories" :key="cat.id">
+                    <option :value="cat.id" x-text="cat.name" :selected="cat.id === editTxModal.categoryId"></option>
+                  </template>
+                </select>
+              </div>
+
+              <!-- Contexto Casa vs Pessoal -->
+              <template x-if="currentUser?.role === 'ADMIN'">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-400 mb-1">CONTEXTO FINANCEIRO</label>
+                  <div class="flex gap-2">
+                    <button type="button" @click="editTxModal.context = 'HOUSEHOLD'"
+                      :class="editTxModal.context === 'HOUSEHOLD' ? 'bg-blue-600 text-white' : 'bg-[#090D16] text-slate-400 border border-[#1F2937]'"
+                      class="flex-1 py-2 text-xs rounded-lg font-medium">Casa (Conjunto)</button>
+                    <button type="button" @click="editTxModal.context = 'PERSONAL'"
+                      :class="editTxModal.context === 'PERSONAL' ? 'bg-purple-600 text-white' : 'bg-[#090D16] text-slate-400 border border-[#1F2937]'"
+                      class="flex-1 py-2 text-xs rounded-lg font-medium">Pessoal</button>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Ignorar em Analytics -->
+              <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pt-1">
+                <input type="checkbox" x-model="editTxModal.isIgnored" class="rounded bg-[#090D16] border-[#1F2937] text-blue-600 focus:ring-0">
+                <span>Ignorar em estatísticas e médias mensais</span>
+              </label>
+
+              <button @click="saveTransaction" :disabled="editTxModal.saving"
+                class="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-medium py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                <span x-text="editTxModal.saving ? 'Salvando...' : 'Salvar Alterações'"></span>
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <!-- ==================== MODAL: ADICIONAR CONEXÃO (PLUGGY / ITEM ID) ==================== -->
+        <template x-if="addConnModal.open">
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div @click.away="addConnModal.open = false" class="bg-[#111827] border border-[#1F2937] w-full max-w-sm rounded-2xl p-5 space-y-4 shadow-2xl">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h3 class="text-sm font-semibold text-white">Adicionar Instituição</h3>
+                <button @click="addConnModal.open = false" class="text-slate-400 hover:text-white p-1">✕</button>
+              </div>
+
+              <!-- Opção 1: Abrir Widget Oficial Pluggy -->
+              <div>
+                <span class="text-xs text-slate-400 block mb-2">Conectar nova instituição via Open Finance:</span>
+                <button @click="openPluggyConnect"
+                  class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded-xl text-xs flex items-center justify-center gap-2">
+                  <span>Abrir Widget Pluggy Connect</span>
+                </button>
+              </div>
+
+              <div class="relative flex py-1 items-center">
+                <div class="flex-grow border-t border-slate-800"></div>
+                <span class="flex-shrink mx-2 text-[10px] text-slate-500 uppercase">ou importar item existente</span>
+                <div class="flex-grow border-t border-slate-800"></div>
+              </div>
+
+              <!-- Opção 2: Inserir Item ID já conectado -->
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">ID DO ITEM DA PLUGGY</label>
+                <input type="text" x-model="addConnModal.manualItemId" placeholder="ex: 3679c5a2-..."
+                  class="w-full bg-[#090D16] border border-[#1F2937] focus:border-blue-500 rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+              </div>
+
+              <button @click="importExistingItem" :disabled="addConnModal.saving"
+                class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-2">
+                <span x-text="addConnModal.saving ? 'Vinculando...' : 'Vincular e Sincronizar'"></span>
+              </button>
+            </div>
+          </div>
+        </template>
+
+      </div>
+    </template>
+
+    <!-- ==================== TOAST NOTIFICAÇÃO ==================== -->
+    <template x-if="toast.show">
+      <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm px-4 py-3 rounded-xl shadow-2xl text-xs flex items-center gap-2 transition-all"
+        :class="toast.type === 'success' ? 'bg-emerald-950/90 text-emerald-200 border border-emerald-800/60' : (toast.type === 'error' ? 'bg-rose-950/90 text-rose-200 border border-rose-800/60' : 'bg-slate-900/95 text-slate-200 border border-slate-800')">
+        <span x-text="toast.type === 'success' ? '✓' : (toast.type === 'error' ? '✕' : 'ℹ')"></span>
+        <span class="flex-1" x-text="toast.message"></span>
+      </div>
+    </template>
+
+  </div>
+
+  <script>
+    // Inicializa ícones Lucide após renderização do Alpine
+    document.addEventListener("DOMContentLoaded", () => {
+      lucide.createIcons();
+    });
+    window.addEventListener("alpine:initialized", () => {
+      setTimeout(() => lucide.createIcons(), 100);
+    });
+  </script>
+</body>
+</html>

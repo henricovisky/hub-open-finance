@@ -38,5 +38,13 @@ if settings.cors_origins:
         allow_headers=["*"],
     )
 
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
 # Roteador versionado
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+# Monta arquivos estáticos do frontend PWA Mobile-First
+frontend_dir = Path(__file__).resolve().parent.parent.parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")

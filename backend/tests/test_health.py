@@ -31,3 +31,12 @@ async def test_health_check_unhealthy(async_client: AsyncClient):
         assert "error: Connection lost" in data["database"]
     finally:
         app.dependency_overrides.pop(get_db_session, None)
+
+
+@pytest.mark.asyncio
+async def test_frontend_index_served(async_client: AsyncClient):
+    """Testa se a página raiz entrega o HTML do frontend PWA."""
+    response = await async_client.get("/")
+    assert response.status_code == 200
+    assert "Hub Financeiro" in response.text
+    assert "hubApp" in response.text
