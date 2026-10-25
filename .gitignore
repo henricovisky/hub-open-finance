@@ -1,0 +1,71 @@
+# ==========================================
+# Segredos, Chaves e Credenciais Privadas
+# ==========================================
+secret.txt
+.env
+.env.*
+!.env.example
+
+# ==========================================
+# Documentação e Fontes Originais Privadas
+# ==========================================
+docs/
+raw/
+
+# ==========================================
+# Python e Ambientes Virtuais
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ==========================================
+# Banco de Dados Local e Volumes Docker
+# ==========================================
+postgres_data/
+*.sqlite3
+*.db
+
+# ==========================================
+# Logs e Arquivos Temporários
+# ==========================================
+*.log
+logs/
+tmp/
+temp/
+
+# ==========================================
+# IDEs e Sistema Operacional
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

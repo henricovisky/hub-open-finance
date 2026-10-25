@@ -1,0 +1,16 @@
+**/.git
+**/.gitignore
+**/.vscode
+**/.idea
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/__pycache__
+**/.pytest_cache
+**/.env*
+!**/.env.example
+**/secret.txt
+**/postgres_data
+**/raw
+**/docs
+**/tests
