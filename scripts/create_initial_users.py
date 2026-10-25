@@ -50,11 +50,11 @@ async def create_user_if_not_exists(
 
 
 async def main():
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@hubfinanceiro.local")
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@exemplo.com")
     admin_password = os.getenv("ADMIN_PASSWORD", "AdminPass123!Secure")
     admin_name = os.getenv("ADMIN_NAME", "Administrador Titular")
 
-    member_email = os.getenv("MEMBER_EMAIL", "membro@hubfinanceiro.local")
+    member_email = os.getenv("MEMBER_EMAIL", "membro@exemplo.com")
     member_password = os.getenv("MEMBER_PASSWORD", "MemberPass123!Secure")
     member_name = os.getenv("MEMBER_NAME", "Usuário Membro")
 
