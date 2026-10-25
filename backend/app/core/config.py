@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
     FRONTEND_ORIGIN: Union[str, List[str]] = "http://localhost:3000"
+    TIMEZONE: str = "America/Sao_Paulo"
 
     # Banco de Dados
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/hub_financeiro"

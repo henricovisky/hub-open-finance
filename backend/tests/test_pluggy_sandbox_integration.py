@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import pytest
 from app.integrations.pluggy.client import PluggyClient
+from app.integrations.pluggy.exceptions import PluggyNotFoundError
 
 
 def get_sandbox_creds():
@@ -39,7 +40,11 @@ async def test_live_pluggy_sandbox_integration():
 
         # 3. Consultar Item ativo no Sandbox (GET /items/{id})
         sandbox_item_id = "a533f2fa-fad1-46e4-bdf1-2cd2188ebfc2"
-        item = await client.items.get(sandbox_item_id)
+        try:
+            item = await client.items.get(sandbox_item_id)
+        except PluggyNotFoundError:
+            pytest.skip(f"Item temporário de Sandbox ({sandbox_item_id}) expirou ou foi removido pela Pluggy.")
+
         assert item.id == sandbox_item_id
         assert item.status in ["UPDATED", "UPDATING", "COMPLETED"]
 

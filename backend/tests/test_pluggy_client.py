@@ -122,6 +122,16 @@ async def test_transactions_v2_cursor_pagination_iterator():
     with respx.mock(base_url="https://api.pluggy.ai") as respx_mock:
         respx_mock.post("/auth").respond(200, json={"apiKey": "key-123"})
 
+        # Chamada 2 (mais específica com cursor): definida primeiro para o respx priorizar o match
+        respx_mock.get("/v2/transactions", params={"accountId": "acc-1", "cursor": "cursor-abc"}).respond(
+            200,
+            json={
+                "results": [
+                    {"id": "tx-3", "description": "Cinema", "amount": 40.0, "currencyCode": "BRL", "date": "2026-10-22T19:00:00Z"},
+                ],
+                "next": None,
+            },
+        )
         # Chamada 1: sem cursor -> retorna next: "cursor-abc"
         respx_mock.get("/v2/transactions", params={"accountId": "acc-1"}).respond(
             200,
@@ -131,16 +141,6 @@ async def test_transactions_v2_cursor_pagination_iterator():
                     {"id": "tx-2", "description": "Mercado", "amount": 150.0, "currencyCode": "BRL", "date": "2026-10-21T12:00:00Z"},
                 ],
                 "next": "cursor-abc",
-            },
-        )
-        # Chamada 2: com cursor="cursor-abc" -> retorna next: None
-        respx_mock.get("/v2/transactions", params={"accountId": "acc-1", "cursor": "cursor-abc"}).respond(
-            200,
-            json={
-                "results": [
-                    {"id": "tx-3", "description": "Cinema", "amount": 40.0, "currencyCode": "BRL", "date": "2026-10-22T19:00:00Z"},
-                ],
-                "next": None,
             },
         )
 
