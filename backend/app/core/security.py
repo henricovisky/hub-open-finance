@@ -1,3 +1,5 @@
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 import jwt
@@ -5,7 +7,13 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from app.core.config import settings
 
-ph = PasswordHasher()
+ph = PasswordHasher(
+    time_cost=3,
+    memory_cost=65536,  # 64 MB
+    parallelism=2,
+    hash_len=32,
+    salt_len=16,
+)
 
 
 def hash_password(password: str) -> str:
@@ -26,17 +34,15 @@ def create_access_token(
     claims: Optional[Dict[str, Any]] = None,
     expires_delta: Optional[timedelta] = None,
 ) -> str:
-    """Cria JWT de curta duração para autorização."""
+    """Cria JWT de curta duração (15 min por padrão) para autorização rápida."""
     now = datetime.now(timezone.utc)
-    if expires_delta:
-        expire = now + expires_delta
-    else:
-        expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
 
     to_encode = {
         "sub": str(subject),
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
+        "type": "access",
     }
     if claims:
         to_encode.update(claims)
@@ -47,3 +53,13 @@ def create_access_token(
 def decode_access_token(token: str) -> Dict[str, Any]:
     """Decodifica e valida o JWT de acesso."""
     return jwt.decode(token, settings.APP_SECRET_KEY, algorithms=[settings.ALGORITHM])
+
+
+def generate_refresh_token() -> str:
+    """Gera um refresh token criptograficamente seguro com 256 bits de entropia."""
+    return secrets.token_urlsafe(32)
+
+
+def hash_refresh_token(token: str) -> str:
+    """Gera hash SHA-256 do refresh token para armazenamento e busca indexada no banco."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
