@@ -6,14 +6,17 @@ from app.api.deps import require_admin
 from app.core.database import get_db_session
 from app.core.pluggy import get_pluggy_client
 from app.integrations.pluggy import PluggyClient
+from app.models.connection import SyncTrigger
 from app.models.user import User
 from app.schemas.connection import (
     ConnectCompleteRequest,
     ConnectionDetailResponse,
     ConnectionResponse,
+    ConnectionSyncRunResponse,
     ConnectTokenResponse,
 )
 from app.services.connection_service import ConnectionService
+from app.services.sync_service import SyncService
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -62,6 +65,23 @@ async def complete_connection(
         item_id=payload.item_id,
     )
     return connection
+
+
+@router.post("/{connection_id}/sync", response_model=ConnectionSyncRunResponse)
+async def sync_connection_manually(
+    connection_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    client: PluggyClient = Depends(get_pluggy_client),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Dispara a sincronização completa de contas e transações de uma conexão (ADMIN)."""
+    sync_run = await SyncService.sync_connection(
+        db=db,
+        connection_id=connection_id,
+        client=client,
+        trigger=SyncTrigger.MANUAL,
+    )
+    return sync_run
 
 
 @router.post("/{connection_id}/reconnect-token", response_model=ConnectTokenResponse)
