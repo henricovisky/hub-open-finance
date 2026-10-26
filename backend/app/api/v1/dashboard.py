@@ -177,7 +177,15 @@ async def get_dashboard_overview(
     conn_res = await db.execute(select(FinancialConnection).where(FinancialConnection.deleted_at.is_(None)))
     connections = conn_res.scalars().all()
     has_attention = any(c.status in (ConnectionStatus.ATTENTION, ConnectionStatus.ACTION_REQUIRED) for c in connections)
-    has_stale = any(c.last_sync_at and (now - c.last_sync_at) > timedelta(hours=12) for c in connections)
+    
+    def _check_stale(sync_dt: Optional[datetime]) -> bool:
+        if not sync_dt:
+            return False
+        if sync_dt.tzinfo is None:
+            sync_dt = sync_dt.replace(tzinfo=timezone.utc)
+        return (now - sync_dt) > timedelta(hours=12)
+
+    has_stale = any(_check_stale(c.last_sync_at) for c in connections)
 
     return DashboardOverviewResponse(
         as_of=now,

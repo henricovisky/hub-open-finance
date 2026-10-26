@@ -37,7 +37,10 @@ async def get_system_status(
 
     connections_status = []
     for c in connections:
-        is_stale = c.last_successful_sync_at is None or c.last_successful_sync_at < stale_threshold
+        last_success = c.last_successful_sync_at
+        if last_success is not None and last_success.tzinfo is None:
+            last_success = last_success.replace(tzinfo=timezone.utc)
+        is_stale = last_success is None or last_success < stale_threshold
         connections_status.append({
             "id": c.id,
             "institution_name": c.institution_name,
