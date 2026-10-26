@@ -56,14 +56,30 @@ async def complete_connection(
 ):
     """
     Recebe o itemId retornado pelo callback do widget e valida diretamente na Pluggy
-    antes de persistir a conexão no banco local.
+    antes de persistir a conexão no banco local e disparar a sincronização imediata.
     """
+    item_id = payload.resolved_item_id
     connection = await ConnectionService.complete_connection(
         db=db,
         user=admin,
         client=client,
-        item_id=payload.item_id,
+        item_id=item_id,
     )
+
+    # Dispara a sincronização inicial imediata de contas, transações e faturas
+    try:
+        await SyncService.sync_connection(
+            db=db,
+            connection_id=connection.id,
+            client=client,
+            trigger=SyncTrigger.INITIAL,
+        )
+    except Exception as e:
+        # Não falha o registro da conexão se a API da Pluggy demorar para disponibilizar transações
+        import logging
+        logging.getLogger(__name__).warning(f"Sincronização imediata inicial: {e}")
+
+    await db.refresh(connection)
     return connection
 
 

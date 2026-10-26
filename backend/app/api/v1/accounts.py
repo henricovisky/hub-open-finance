@@ -112,6 +112,14 @@ async def update_account(
         account.name = payload.name
     if payload.owner_context is not None:
         account.owner_context = payload.owner_context
+        # Propaga a nova tag de contexto para todos os lançamentos existentes da conta
+        from sqlalchemy import update
+        from app.models.finance import Transaction
+        await db.execute(
+            update(Transaction)
+            .where(Transaction.account_id == account.id)
+            .values(context=payload.owner_context)
+        )
     if payload.is_active is not None:
         account.is_active = payload.is_active
 

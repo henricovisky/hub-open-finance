@@ -1,6 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 import { usePermissions, FinancialContext } from '@/lib/permissions';
-import { Home, User, Layers } from 'lucide-react';
+import { Home, User, Layers, TrendingUp, Briefcase } from 'lucide-react';
 import clsx from 'clsx';
 
 export function ContextSwitcher({ className }: { className?: string }) {
@@ -18,6 +18,8 @@ export function ContextSwitcher({ className }: { className?: string }) {
   const options: Array<{ id: FinancialContext; label: string; icon: React.ReactNode }> = [
     { id: 'HOUSEHOLD', label: 'Casa', icon: <Home className="w-3.5 h-3.5" /> },
     { id: 'PERSONAL', label: 'Pessoal', icon: <User className="w-3.5 h-3.5" /> },
+    { id: 'INVESTMENT', label: 'Investimentos', icon: <TrendingUp className="w-3.5 h-3.5" /> },
+    { id: 'WORK', label: 'Trabalho / PJ', icon: <Briefcase className="w-3.5 h-3.5" /> },
   ];
 
   if (isAdmin) {

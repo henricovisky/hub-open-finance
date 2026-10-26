@@ -11,8 +11,17 @@ class ConnectTokenResponse(BaseModel):
 
 
 class ConnectCompleteRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    item_id: str = Field(min_length=1, max_length=100)
+    model_config = ConfigDict(extra="ignore")
+    item_id: Optional[str] = None
+    pluggy_item_id: Optional[str] = None
+    itemId: Optional[str] = None
+
+    @property
+    def resolved_item_id(self) -> str:
+        val = self.item_id or self.pluggy_item_id or self.itemId
+        if not val:
+            raise ValueError("item_id é obrigatório.")
+        return val.strip()
 
 
 class ConnectionSyncRunResponse(BaseModel):

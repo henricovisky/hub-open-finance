@@ -33,6 +33,8 @@ class FinancialContext(str, enum.Enum):
     """
     HOUSEHOLD = "HOUSEHOLD"
     PERSONAL = "PERSONAL"
+    INVESTMENT = "INVESTMENT"
+    WORK = "WORK"
     OTHER = "OTHER"
 
 
