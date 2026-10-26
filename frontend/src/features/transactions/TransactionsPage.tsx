@@ -44,14 +44,14 @@ export function TransactionsPage() {
     queryKey: ['transactions', context, filterType, searchQuery],
     queryFn: async () => {
       try {
-        const params: any = { context, limit: 50 };
-        if (filterType === 'EXPENSE') params.type = 'EXPENSE';
-        if (filterType === 'INCOME') params.type = 'INCOME';
+        const params: any = { context, page_size: 100 };
+        if (filterType === 'EXPENSE') params.transaction_type = 'EXPENSE';
+        if (filterType === 'INCOME') params.transaction_type = 'INCOME';
         if (filterType === 'UNCATEGORIZED') params.uncategorized_only = true;
         if (searchQuery) params.search = searchQuery;
 
         const res = await api.get<any>('/transactions', params);
-        return res.data || res.items || res;
+        return res?.results || res?.data || res?.items || (Array.isArray(res) ? res : []);
       } catch {
         return [];
       }

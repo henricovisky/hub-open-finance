@@ -82,6 +82,60 @@ async def list_investments(
     return response
 
 
+@router.get("/portfolio")
+async def get_portfolio_allocation(
+    context: Optional[str] = Query(None, description="Filtrar por contexto de custódia"),
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retorna a alocação atual de investimentos consolidada por classe de ativos (G-16).
+    """
+    stmt = (
+        select(Investment)
+        .join(Account)
+        .outerjoin(AssetClass)
+        .options(selectinload(Investment.account), selectinload(Investment.asset_class))
+    )
+
+    if current_user.role != UserRole.ADMIN:
+        allowed_subquery = (
+            select(AccountPermission.account_id)
+            .where(
+                AccountPermission.user_id == current_user.id,
+                AccountPermission.can_view == True,
+            )
+        )
+        stmt = stmt.where(Investment.account_id.in_(allowed_subquery))
+
+    if context:
+        stmt = stmt.where(Account.owner_context == context)
+
+    result = await db.execute(stmt)
+    investments = result.scalars().all()
+
+    class_totals: dict[str, float] = {}
+    total_val = 0.0
+
+    for inv in investments:
+        class_name = inv.asset_class.name if inv.asset_class else (inv.type or "Outros")
+        bal = float(inv.balance or 0.0)
+        class_totals[class_name] = class_totals.get(class_name, 0.0) + bal
+        total_val += bal
+
+    allocation = []
+    for name, val in sorted(class_totals.items(), key=lambda x: x[1], reverse=True):
+        pct = (val / total_val * 100.0) if total_val > 0 else 0.0
+        allocation.append({
+            "name": name,
+            "currentVal": round(val, 2),
+            "current": round(pct, 1),
+            "target": round(pct, 1),  # Default target = atual se não customizado
+        })
+
+    return allocation
+
+
 @router.get("/{id}", response_model=InvestmentRead)
 async def get_investment(
     id: uuid.UUID,

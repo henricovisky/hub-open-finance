@@ -16,8 +16,10 @@ from app.models.user import User
 router = APIRouter(prefix="/cashflow", tags=["cashflow"])
 
 
-async def _check_stale_accounts(db: AsyncSession, authorized_acc_ids: set) -> tuple[bool, Optional[datetime]]:
-    stmt = select(func.max(Account.last_synced_at)).where(Account.id.in_(authorized_acc_ids))
+async def _check_stale_accounts(db: AsyncSession, authorized_acc_ids: Optional[List] = None) -> tuple[bool, Optional[datetime]]:
+    stmt = select(func.max(Account.last_synced_at))
+    if authorized_acc_ids is not None:
+        stmt = stmt.where(Account.id.in_(authorized_acc_ids))
     res = await db.execute(stmt)
     latest_sync = res.scalar_one_or_none()
     if not latest_sync:
@@ -44,7 +46,7 @@ async def get_cashflow_series(
     Conforme 04 Adendo de API §1.
     """
     authorized_acc_ids = await get_authorized_account_ids(db, current_user)
-    if not authorized_acc_ids:
+    if authorized_acc_ids is not None and not authorized_acc_ids:
         now_iso = datetime.now(timezone.utc).isoformat()
         return {
             "data": {
@@ -64,35 +66,35 @@ async def get_cashflow_series(
         }
 
     now = datetime.now(timezone.utc)
-    if period and len(period.split("-")) == 2:
+    if period and isinstance(period, str) and len(period.split("-")) == 2:
         y, m = map(int, period.split("-"))
         dt_start, dt_end = get_month_range(y, m)
-    elif from_date and to_date:
+    elif from_date and isinstance(from_date, date) and to_date and isinstance(to_date, date):
         dt_start = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
         dt_end = datetime.combine(to_date, datetime.max.time(), tzinfo=timezone.utc)
     else:
         dt_start, dt_end = get_month_range(now.year, now.month)
 
     # Filtro base de transações válidas (sem transferências internas e não ignoradas)
-    query = (
-        select(Transaction)
-        .where(
-            Transaction.account_id.in_(authorized_acc_ids),
-            Transaction.date >= dt_start,
-            Transaction.date <= dt_end,
-            Transaction.is_internal_transfer == False,
-            Transaction.is_ignored_in_analytics == False,
-        )
-        .order_by(Transaction.date.asc())
-    )
+    filters = [
+        Transaction.date >= dt_start,
+        Transaction.date <= dt_end,
+        Transaction.is_internal_transfer == False,
+        Transaction.is_ignored_in_analytics == False,
+    ]
+
+    if authorized_acc_ids is not None:
+        filters.append(Transaction.account_id.in_(authorized_acc_ids))
 
     if account_id:
-        query = query.where(Transaction.account_id == account_id)
+        filters.append(Transaction.account_id == account_id)
 
     if context:
-        query = query.where(Transaction.context == context)
+        filters.append(Transaction.context == context)
     elif current_user.role == UserRole.MEMBER:
-        query = query.where(Transaction.context != FinancialContext.PERSONAL)
+        filters.append(Transaction.context != FinancialContext.PERSONAL)
+
+    query = select(Transaction).where(*filters).order_by(Transaction.date.asc())
 
     result = await db.execute(query)
     transactions = result.scalars().all()

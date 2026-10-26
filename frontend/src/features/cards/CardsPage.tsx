@@ -42,9 +42,9 @@ export function CardsPage() {
       try {
         const res = await api.get<any>('/transactions', {
           account_id: currentCard.id,
-          limit: 20,
+          page_size: 50,
         });
-        return res.data || res.items || res || [];
+        return res?.results || res?.data || res?.items || (Array.isArray(res) ? res : []);
       } catch {
         return [];
       }

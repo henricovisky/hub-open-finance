@@ -71,11 +71,13 @@ export function OverviewPage() {
     },
   });
 
-  const totals = cashflowData?.data?.totals || overviewData?.totals || {
-    income: '0.00',
-    expenses: '0.00',
-    net: '0.00',
-  };
+  const totals = cashflowData?.data?.totals?.income !== undefined && cashflowData?.data?.totals?.income !== '0.00'
+    ? cashflowData.data.totals
+    : {
+        income: overviewData?.monthly_income !== undefined ? String(overviewData.monthly_income) : '0.00',
+        expenses: overviewData?.monthly_expenses !== undefined ? String(overviewData.monthly_expenses) : '0.00',
+        net: overviewData?.monthly_net !== undefined ? String(overviewData.monthly_net) : '0.00',
+      };
 
   const points = cashflowData?.data?.points || [];
   const primaryCard = cards[0] || null;
@@ -107,9 +109,9 @@ export function OverviewPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard
           title="Saldo Disponível"
-          value={overviewData?.available_balance || '0.00'}
+          value={overviewData?.liquid_balance !== undefined ? String(overviewData.liquid_balance) : '0.00'}
           icon={<Wallet className="w-4 h-4 text-primary" />}
-          subtitle="Soma das contas ativas"
+          subtitle="Soma das contas correntes ativas"
           isLoading={isOverviewLoading}
         />
         <KpiCard
@@ -117,20 +119,20 @@ export function OverviewPage() {
           value={totals.income}
           icon={<TrendingUp className="w-4 h-4 text-income" />}
           delta={totals.income !== '0.00' ? { percent: 0, isGood: true, text: 'período atual' } : undefined}
-          isLoading={isCashflowLoading}
+          isLoading={isCashflowLoading && !overviewData}
         />
         <KpiCard
           title="Saídas no Mês"
           value={totals.expenses}
           icon={<TrendingDown className="w-4 h-4 text-expense" />}
           delta={totals.expenses !== '0.00' ? { percent: 0, isGood: false, text: 'período atual' } : undefined}
-          isLoading={isCashflowLoading}
+          isLoading={isCashflowLoading && !overviewData}
         />
         <KpiCard
           title="Saldo Líquido"
           value={totals.net}
           icon={<DollarSign className="w-4 h-4 text-primary" />}
-          isLoading={isCashflowLoading}
+          isLoading={isCashflowLoading && !overviewData}
         />
       </div>
 

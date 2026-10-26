@@ -17,6 +17,53 @@ from app.models.user import User
 router = APIRouter(prefix="/cards", tags=["cards"])
 
 
+@router.get("")
+async def list_cards(
+    context: Optional[FinancialContext] = None,
+    current_user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Retorna lista de cartões de crédito ativos com saldos e limites.
+    Conforme matriz de permissões e contexto selecionado.
+    """
+    authorized_acc_ids = await get_authorized_account_ids(db, current_user)
+    stmt = (
+        select(Account)
+        .options(selectinload(Account.card))
+        .where(Account.type == AccountType.CREDIT, Account.is_active == True)
+    )
+    if authorized_acc_ids is not None:
+        if not authorized_acc_ids:
+            return []
+        stmt = stmt.where(Account.id.in_(authorized_acc_ids))
+    if context:
+        stmt = stmt.where(Account.owner_context == context)
+    elif current_user.role == UserRole.MEMBER:
+        stmt = stmt.where(Account.owner_context == FinancialContext.HOUSEHOLD)
+
+    result = await db.execute(stmt)
+    accounts = result.scalars().all()
+    cards_list = []
+    for acc in accounts:
+        last_four = acc.card.last_four_digits if acc.card else None
+        closing_day = acc.card.closing_day if acc.card else None
+        due_day = acc.card.due_day if acc.card else None
+        cards_list.append({
+            "id": str(acc.id),
+            "account_id": str(acc.id),
+            "name": acc.name,
+            "current_balance": str(acc.current_balance or Decimal("0.00")),
+            "credit_limit": str(acc.credit_limit) if acc.credit_limit is not None else None,
+            "available_limit": str(acc.available_balance) if acc.available_balance is not None else None,
+            "last_four_digits": last_four,
+            "closing_day": closing_day,
+            "due_day": due_day,
+            "owner_context": acc.owner_context.value if hasattr(acc.owner_context, "value") else str(acc.owner_context),
+        })
+    return cards_list
+
+
 @router.get("/{id}/limit-usage")
 async def get_card_limit_usage(
     id: uuid.UUID,

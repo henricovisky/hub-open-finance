@@ -20,6 +20,54 @@ from app.models.finance import Transaction, TransactionType
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
+# Mapeamento amigável pt-BR para categorias da Pluggy
+CATEGORY_TRANSLATIONS = {
+    "Shopping": "Compras & Varejo",
+    "Transfers": "Transferências",
+    "Groceries": "Supermercado & Alimentação",
+    "Transfer - PIX": "Transferência PIX",
+    "Same person transfer": "Transferência Mesma Titularidade",
+    "Investments": "Investimentos",
+    "Proceeds interests and dividends": "Rendimentos & Dividendos",
+    "Eating out": "Restaurantes & Bares",
+    "Pharmacy": "Farmácia & Saúde",
+    "Clothing": "Vestuário & Moda",
+    "Fixed income": "Renda Fixa",
+    "Taxi and ride-hailing": "Transporte por Aplicativo",
+    "Credit card payment": "Pagamento de Fatura",
+    "Telecommunications": "Telefonia & Internet",
+    "Services": "Serviços Gerais",
+    "Gas stations": "Combustível",
+    "Automotive": "Automotivo",
+    "Vehicle maintenance": "Manutenção Veicular",
+    "Houseware": "Casa & Utilidades",
+    "Bookstore": "Livraria & Papelaria",
+    "Taxes on investments": "Impostos s/ Investimentos",
+    "School": "Educação & Escola",
+    "Parking": "Estacionamento",
+    "Digital services": "Serviços Digitais",
+    "Video streaming": "Streaming & Assinaturas",
+    "Water": "Água & Saneamento",
+    "Salary": "Salário & Remuneração",
+    "Online shopping": "Compras Online",
+    "Financing": "Financiamentos",
+    "Electricity": "Energia Elétrica",
+    "Dentist": "Dentista & Saúde",
+    "Travel": "Viagens & Hospedagem",
+    "Pet supplies and vet": "Pets & Veterinário",
+    "Loans and financing": "Empréstimos & Financiamento",
+    "Income taxes": "Imposto de Renda",
+    "Gyms and fitness centers": "Academia & Esportes",
+    "Transfer - TED": "Transferência TED",
+    "Tickets": "Ingressos & Eventos",
+    "Housing": "Moradia",
+    "Gambling": "Apostas & Jogos",
+    "Electronics": "Eletrônicos & Informática",
+    "Food delivery": "Delivery & Comida",
+    "Internet": "Internet",
+}
+
+
 @router.get("/summary")
 async def get_categories_summary(
     context: Optional[FinancialContext] = None,
@@ -32,11 +80,11 @@ async def get_categories_summary(
     Conforme 04 Adendo de API §1.
     """
     authorized_acc_ids = await get_authorized_account_ids(db, current_user)
-    if not authorized_acc_ids:
+    if authorized_acc_ids is not None and not authorized_acc_ids:
         return []
 
     now = datetime.now(timezone.utc)
-    if period and len(period.split("-")) == 2:
+    if period and isinstance(period, str) and len(period.split("-")) == 2:
         y, m = map(int, period.split("-"))
     else:
         y, m = now.year, now.month
@@ -44,70 +92,63 @@ async def get_categories_summary(
     cur_start, cur_end = get_month_range(y, m)
     prev_start, prev_end = get_prev_months_range(y, m, num_months=3)
 
-    # 1. Gastos do período corrente
-    cur_query = (
-        select(
-            Transaction.category_id,
-            func.sum(func.abs(Transaction.amount)).label("total_spent"),
-        )
-        .where(
-            Transaction.account_id.in_(authorized_acc_ids),
-            Transaction.date >= cur_start,
-            Transaction.date <= cur_end,
-            Transaction.type == TransactionType.EXPENSE,
-            Transaction.is_internal_transfer == False,
-            Transaction.is_ignored_in_analytics == False,
-        )
-        .group_by(Transaction.category_id)
-    )
+    # Filtros base
+    cur_filters = [
+        Transaction.date >= cur_start,
+        Transaction.date <= cur_end,
+        Transaction.type == TransactionType.EXPENSE,
+        Transaction.is_internal_transfer == False,
+        Transaction.is_ignored_in_analytics == False,
+    ]
+    prev_filters = [
+        Transaction.date >= prev_start,
+        Transaction.date <= prev_end,
+        Transaction.type == TransactionType.EXPENSE,
+        Transaction.is_internal_transfer == False,
+        Transaction.is_ignored_in_analytics == False,
+    ]
+
+    if authorized_acc_ids is not None:
+        cur_filters.append(Transaction.account_id.in_(authorized_acc_ids))
+        prev_filters.append(Transaction.account_id.in_(authorized_acc_ids))
 
     if context:
-        cur_query = cur_query.where(Transaction.context == context)
+        cur_filters.append(Transaction.context == context)
+        prev_filters.append(Transaction.context == context)
     elif current_user.role == UserRole.MEMBER:
-        cur_query = cur_query.where(Transaction.context != FinancialContext.PERSONAL)
+        cur_filters.append(Transaction.context != FinancialContext.PERSONAL)
+        prev_filters.append(Transaction.context != FinancialContext.PERSONAL)
 
+    # 1. Gastos do período corrente agrupados por provider_category
+    cur_query = (
+        select(
+            func.coalesce(Transaction.provider_category, "Outros").label("cat_name"),
+            func.sum(func.abs(Transaction.amount)).label("total_spent"),
+        )
+        .where(*cur_filters)
+        .group_by(func.coalesce(Transaction.provider_category, "Outros"))
+    )
     cur_res = await db.execute(cur_query)
-    cur_by_cat = {row[0]: row[1] for row in cur_res.all()}
+    cur_by_cat = {row[0]: Decimal(str(row[1])) for row in cur_res.all() if row[1] is not None}
 
     # 2. Gastos dos 3 meses anteriores para cálculo da média móvel
     prev_query = (
         select(
-            Transaction.category_id,
+            func.coalesce(Transaction.provider_category, "Outros").label("cat_name"),
             func.sum(func.abs(Transaction.amount)).label("total_spent_3m"),
         )
-        .where(
-            Transaction.account_id.in_(authorized_acc_ids),
-            Transaction.date >= prev_start,
-            Transaction.date <= prev_end,
-            Transaction.type == TransactionType.EXPENSE,
-            Transaction.is_internal_transfer == False,
-            Transaction.is_ignored_in_analytics == False,
-        )
-        .group_by(Transaction.category_id)
+        .where(*prev_filters)
+        .group_by(func.coalesce(Transaction.provider_category, "Outros"))
     )
-
-    if context:
-        prev_query = prev_query.where(Transaction.context == context)
-    elif current_user.role == UserRole.MEMBER:
-        prev_query = prev_query.where(Transaction.context != FinancialContext.PERSONAL)
-
     prev_res = await db.execute(prev_query)
-    prev_by_cat = {row[0]: (row[1] / Decimal("3.0")) for row in prev_res.all()}
+    prev_by_cat = {row[0]: (Decimal(str(row[1])) / Decimal("3.0")) for row in prev_res.all() if row[1] is not None}
 
-    # 3. Busca metadados de todas as categorias
-    cat_query = select(Category).order_by(Category.name.asc())
-    if current_user.role == UserRole.MEMBER:
-        cat_query = cat_query.where(Category.context == FinancialContext.HOUSEHOLD)
-    elif context:
-        cat_query = cat_query.where(Category.context == context)
-
-    cat_res = await db.execute(cat_query)
-    categories = cat_res.scalars().all()
-
+    all_cat_names = set(cur_by_cat.keys()) | set(prev_by_cat.keys())
     summary = []
-    for cat in categories:
-        cur_val = cur_by_cat.get(cat.id, Decimal("0.00"))
-        avg_val = prev_by_cat.get(cat.id, Decimal("0.00"))
+
+    for raw_name in all_cat_names:
+        cur_val = cur_by_cat.get(raw_name, Decimal("0.00"))
+        avg_val = prev_by_cat.get(raw_name, Decimal("0.00"))
 
         diff_pct = None
         status_label = "IN_LINE"
@@ -122,9 +163,10 @@ async def get_categories_summary(
             status_label = "INSUFFICIENT_HISTORY"
 
         if cur_val > Decimal("0.00") or avg_val > Decimal("0.00"):
+            friendly_name = CATEGORY_TRANSLATIONS.get(raw_name, raw_name)
             summary.append({
-                "id": str(cat.id),
-                "name": cat.name,
+                "id": raw_name,
+                "name": friendly_name,
                 "current_amount": str(cur_val.quantize(Decimal("0.01"))),
                 "average_3m": str(avg_val.quantize(Decimal("0.01"))) if avg_val > 0 else None,
                 "difference_percent": round(diff_pct, 1) if diff_pct is not None else None,
