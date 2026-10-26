@@ -23,6 +23,9 @@ def test_endpoint(name, method="GET", path="", body=None, token=None):
                 res_json = json.loads(raw.decode("utf-8"))
                 print(f"✅ {name}: HTTP {resp.status} (JSON)")
                 return res_json
+            elif "image/" in content_type:
+                print(f"✅ {name}: HTTP {resp.status} ({content_type}, {len(raw)} bytes binary)")
+                return raw
             else:
                 print(f"✅ {name}: HTTP {resp.status} ({content_type}, {len(raw)} bytes)")
                 return raw.decode("utf-8")
@@ -80,5 +83,10 @@ if accs and len(accs) > 0:
 test_endpoint("10. SPA Root (/) Delivery", path="/")
 test_endpoint("11. SPA Route (/transacoes) Fallback Delivery", path="/transacoes")
 test_endpoint("12. SPA Dev Catalog (/_dev/components) Delivery", path="/_dev/components")
+
+# 13. PWA Assets Delivery
+test_endpoint("13. PWA Manifest Delivery", path="/manifest.json")
+test_endpoint("14. Service Worker Delivery", path="/sw.js")
+test_endpoint("15. PWA Icon 192 Delivery", path="/icon-192.png")
 
 print("=== TODOS OS TESTES PASSARAM COM SUCESSO! ===")
