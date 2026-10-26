@@ -46,11 +46,23 @@ from fastapi.responses import FileResponse
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 # Monta arquivos estáticos do frontend SPA Responsivo v2
-frontend_dir = Path(__file__).resolve().parent.parent.parent / "frontend"
-dist_dir = frontend_dir / "dist"
-static_target = dist_dir if dist_dir.exists() else frontend_dir
+app_root = Path(__file__).resolve().parent.parent.parent
+candidates = [
+    app_root / "frontend" / "dist",
+    Path("/app/frontend/dist"),
+    Path("/app/frontend"),
+    app_root / "frontend",
+    Path("frontend/dist"),
+    Path("frontend"),
+]
 
-if static_target.exists():
+static_target = None
+for candidate in candidates:
+    if candidate.exists() and (candidate / "index.html").exists():
+        static_target = candidate
+        break
+
+if static_target:
     if (static_target / "assets").exists():
         app.mount("/assets", StaticFiles(directory=str(static_target / "assets")), name="assets")
 
@@ -63,4 +75,5 @@ if static_target.exists():
         if index_file.is_file():
             return FileResponse(index_file)
         return {"error": "Frontend build not found"}
+
 
