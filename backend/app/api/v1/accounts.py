@@ -45,7 +45,7 @@ async def list_accounts(
     if not include_inactive:
         stmt = stmt.where(Account.is_active.is_(True))
 
-    if context:
+    if context and context != FinancialContext.CONSOLIDATED:
         stmt = stmt.where(Account.owner_context == context)
 
     if account_type:

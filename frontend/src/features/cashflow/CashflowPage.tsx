@@ -14,7 +14,7 @@ import clsx from 'clsx';
 export function CashflowPage() {
   const [searchParams] = useSearchParams();
   const { hideValues } = useTheme();
-  const [granularity, setGranularity] = useState<'day' | 'week' | 'month'>('day');
+  const [granularity, setGranularity] = useState<'day' | 'week' | 'month'>('month');
   const [accountFilter, setAccountFilter] = useState('all');
 
   const context = searchParams.get('context') || 'HOUSEHOLD';
@@ -69,19 +69,23 @@ export function CashflowPage() {
           <p className="text-xs text-text-muted mt-0.5">Visão consolidada de entradas, saídas e resultado acumulado</p>
         </div>
 
-        {/* Seletor de Granularidade (Dia, Semana, Mês) */}
+        {/* Seletor de Granularidade (Mensal padrão, Semanal, Diária) */}
         <div className="inline-flex items-center p-0.5 bg-surface-2 border border-border rounded-lg text-xs font-semibold self-start sm:self-auto">
-          {(['day', 'week', 'month'] as const).map((g) => (
+          {[
+            { id: 'month', label: 'Mensal' },
+            { id: 'week', label: 'Semanal' },
+            { id: 'day', label: 'Diária' },
+          ].map((item) => (
             <button
-              key={g}
+              key={item.id}
               type="button"
-              onClick={() => setGranularity(g)}
+              onClick={() => setGranularity(item.id as any)}
               className={clsx(
-                'px-3 py-1.5 rounded-md transition-colors capitalize',
-                granularity === g ? 'bg-surface text-primary shadow-subtle' : 'text-text-muted hover:text-text-primary'
+                'px-3.5 py-1.5 rounded-md transition-colors',
+                granularity === item.id ? 'bg-surface text-primary shadow-subtle font-bold' : 'text-text-muted hover:text-text-primary'
               )}
             >
-              {g === 'day' ? 'Dia' : g === 'week' ? 'Semana' : 'Mês'}
+              {item.label}
             </button>
           ))}
         </div>

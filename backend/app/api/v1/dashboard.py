@@ -70,7 +70,7 @@ async def get_dashboard_overview(
     # Membro é estritamente limitado ao contexto HOUSEHOLD
     if current_user.role != UserRole.ADMIN:
         applied_context = "HOUSEHOLD"
-    elif context:
+    elif context and context != FinancialContext.CONSOLIDATED:
         applied_context = context.value
     else:
         applied_context = "ALL"
@@ -213,7 +213,7 @@ async def get_dashboard_cashflow(
     """Retorna a evolução mensal de receitas, despesas e saldo líquido para gráficos."""
     now = datetime.now(timezone.utc)
     authorized_ids = await get_authorized_account_ids(db, current_user)
-    applied_context = "HOUSEHOLD" if current_user.role != UserRole.ADMIN else (context.value if context else "ALL")
+    applied_context = "HOUSEHOLD" if current_user.role != UserRole.ADMIN else (context.value if (context and context != FinancialContext.CONSOLIDATED) else "ALL")
 
     result_items: List[MonthlyCashflowItem] = []
 
@@ -275,7 +275,7 @@ async def get_dashboard_categories(
     """
     now = datetime.now(timezone.utc)
     authorized_ids = await get_authorized_account_ids(db, current_user)
-    applied_context = "HOUSEHOLD" if current_user.role != UserRole.ADMIN else (context.value if context else "ALL")
+    applied_context = "HOUSEHOLD" if current_user.role != UserRole.ADMIN else (context.value if (context and context != FinancialContext.CONSOLIDATED) else "ALL")
 
     # Mês corrente
     curr_start, curr_end = get_month_range(now.year, now.month)

@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -37,7 +38,7 @@ async def list_cards(
         if not authorized_acc_ids:
             return []
         stmt = stmt.where(Account.id.in_(authorized_acc_ids))
-    if context:
+    if context and context != FinancialContext.CONSOLIDATED:
         stmt = stmt.where(Account.owner_context == context)
     elif current_user.role == UserRole.MEMBER:
         stmt = stmt.where(Account.owner_context == FinancialContext.HOUSEHOLD)
@@ -49,6 +50,22 @@ async def list_cards(
         last_four = acc.card.last_four_digits if acc.card else None
         closing_day = acc.card.closing_day if acc.card else None
         due_day = acc.card.due_day if acc.card else None
+
+        if due_day is None or closing_day is None:
+            bill_stmt = (
+                select(Bill)
+                .where(Bill.account_id == acc.id)
+                .order_by(Bill.due_date.desc())
+                .limit(1)
+            )
+            bill_res = await db.execute(bill_stmt)
+            latest_bill = bill_res.scalar_one_or_none()
+            if latest_bill and latest_bill.due_date:
+                if due_day is None:
+                    due_day = latest_bill.due_date.day
+                if closing_day is None:
+                    closing_day = (latest_bill.due_date - timedelta(days=7)).day
+
         cards_list.append({
             "id": str(acc.id),
             "account_id": str(acc.id),

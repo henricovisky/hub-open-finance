@@ -21,9 +21,22 @@ export function FlowChart({ points, height = '260px' }: FlowChartProps) {
   const { resolvedTheme, hideValues } = useTheme();
 
   const options = useMemo(() => {
+    const MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const FULL_MONTHS = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+
     const dates = points.map((p) => {
       const parts = p.date.split('-');
-      return parts.length >= 3 ? `${parts[2]}/${parts[1]}` : p.date;
+      if (parts.length === 2) {
+        const m = parseInt(parts[1], 10);
+        return `${MONTHS[m - 1] || parts[1]}/${parts[0].slice(2)}`;
+      }
+      if (parts.length >= 3) {
+        return `${parts[2]}/${parts[1]}`;
+      }
+      return p.date;
     });
 
     const incomeData = points.map((p) => (typeof p.income === 'string' ? parseFloat(p.income) : p.income));
@@ -43,7 +56,17 @@ export function FlowChart({ points, height = '260px' }: FlowChartProps) {
           if (!Array.isArray(params) || params.length === 0) return '';
           const idx = params[0].dataIndex;
           const pt = points[idx];
-          let html = `<div style="font-size:12px; font-weight:600; margin-bottom:4px; color:${isDark ? '#f8fafc' : '#0f172a'}">${pt.date}</div>`;
+          
+          let title = pt.date;
+          const parts = pt.date.split('-');
+          if (parts.length === 2) {
+            const m = parseInt(parts[1], 10);
+            title = `${FULL_MONTHS[m - 1] || parts[1]} de ${parts[0]}`;
+          } else if (parts.length >= 3) {
+            title = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          }
+
+          let html = `<div style="font-size:12px; font-weight:600; margin-bottom:4px; color:${isDark ? '#f8fafc' : '#0f172a'}">${title}</div>`;
           params.forEach((item: any) => {
             const valStr = formatMoney(item.value, hideValues);
             html += `<div style="display:flex; justify-content:space-between; gap:12px; font-size:11px; margin-top:2px;">

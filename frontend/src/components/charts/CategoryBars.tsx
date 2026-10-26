@@ -73,15 +73,17 @@ export function CategoryBars({ categories, height = '280px' }: CategoryBarsProps
         },
       },
       legend: {
-        bottom: 0,
-        textStyle: { color: textColor, fontSize: 11 },
+        top: 0,
+        right: '4%',
+        textStyle: { color: textColor, fontSize: 12, fontWeight: 500 },
+        itemGap: 20,
         data: ['Período Atual', 'Média 3 Meses'],
       },
       grid: {
-        top: 15,
+        top: 36,
         left: '4%',
-        right: '4%',
-        bottom: 35,
+        right: '6%',
+        bottom: 25,
         containLabel: true,
       },
       xAxis: {
@@ -97,7 +99,17 @@ export function CategoryBars({ categories, height = '280px' }: CategoryBarsProps
         type: 'category',
         data: categoryNames,
         axisLine: { lineStyle: { color: splitLineColor } },
-        axisLabel: { color: textColor, fontSize: 11 },
+        axisLabel: {
+          color: isDark ? '#e2e8f0' : '#1e293b',
+          fontSize: 11,
+          fontWeight: 500,
+          formatter: (value: string) => {
+            if (value.length > 22) {
+              return value.slice(0, 20) + '...';
+            }
+            return value;
+          },
+        },
       },
       series: [
         {
@@ -105,20 +117,36 @@ export function CategoryBars({ categories, height = '280px' }: CategoryBarsProps
           type: 'bar',
           data: currentData,
           itemStyle: {
-            color: '#2563eb',
+            color: '#3b82f6',
             borderRadius: [0, 4, 4, 0],
           },
-          barMaxWidth: 16,
+          barMaxWidth: 18,
+          label: {
+            show: true,
+            position: 'right',
+            color: isDark ? '#93c5fd' : '#2563eb',
+            fontSize: 10,
+            fontWeight: 600,
+            formatter: (p: any) => p.value > 0 ? formatCompactMoney(p.value, hideValues) : '',
+          },
         },
         {
           name: 'Média 3 Meses',
           type: 'bar',
           data: avgData,
           itemStyle: {
-            color: isDark ? '#4b5563' : '#94a3b8',
+            color: '#f59e0b',
             borderRadius: [0, 4, 4, 0],
           },
-          barMaxWidth: 16,
+          barMaxWidth: 18,
+          label: {
+            show: true,
+            position: 'right',
+            color: isDark ? '#fcd34d' : '#d97706',
+            fontSize: 10,
+            fontWeight: 600,
+            formatter: (p: any) => p.value > 0 ? formatCompactMoney(p.value, hideValues) : '',
+          },
         },
       ],
     };

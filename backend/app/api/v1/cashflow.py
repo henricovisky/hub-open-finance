@@ -66,14 +66,38 @@ async def get_cashflow_series(
         }
 
     now = datetime.now(timezone.utc)
-    if period and isinstance(period, str) and len(period.split("-")) == 2:
-        y, m = map(int, period.split("-"))
-        dt_start, dt_end = get_month_range(y, m)
-    elif from_date and isinstance(from_date, date) and to_date and isinstance(to_date, date):
-        dt_start = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
-        dt_end = datetime.combine(to_date, datetime.max.time(), tzinfo=timezone.utc)
-    else:
-        dt_start, dt_end = get_month_range(now.year, now.month)
+    if granularity == "month":
+        if from_date and isinstance(from_date, date) and to_date and isinstance(to_date, date):
+            dt_start = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
+            dt_end = datetime.combine(to_date, datetime.max.time(), tzinfo=timezone.utc)
+        elif period and isinstance(period, str) and len(period.split("-")) == 2:
+            y, m = map(int, period.split("-"))
+            prev_start, _ = get_prev_months_range(y, m, num_months=5)
+            _, end_cur = get_month_range(y, m)
+            dt_start, dt_end = prev_start, end_cur
+        else:
+            prev_start, _ = get_prev_months_range(now.year, now.month, num_months=5)
+            _, end_cur = get_month_range(now.year, now.month)
+            dt_start, dt_end = prev_start, end_cur
+    elif granularity == "week":
+        if from_date and isinstance(from_date, date) and to_date and isinstance(to_date, date):
+            dt_start = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
+            dt_end = datetime.combine(to_date, datetime.max.time(), tzinfo=timezone.utc)
+        elif period and isinstance(period, str) and len(period.split("-")) == 2:
+            y, m = map(int, period.split("-"))
+            dt_start, dt_end = get_month_range(y, m)
+        else:
+            dt_end = datetime.combine(now.date(), datetime.max.time(), tzinfo=timezone.utc)
+            dt_start = dt_end - timedelta(weeks=8)
+    else: # day
+        if from_date and isinstance(from_date, date) and to_date and isinstance(to_date, date):
+            dt_start = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
+            dt_end = datetime.combine(to_date, datetime.max.time(), tzinfo=timezone.utc)
+        elif period and isinstance(period, str) and len(period.split("-")) == 2:
+            y, m = map(int, period.split("-"))
+            dt_start, dt_end = get_month_range(y, m)
+        else:
+            dt_start, dt_end = get_month_range(now.year, now.month)
 
     # Filtro base de transações válidas (sem transferências internas e não ignoradas)
     filters = [
@@ -89,7 +113,7 @@ async def get_cashflow_series(
     if account_id:
         filters.append(Transaction.account_id == account_id)
 
-    if context:
+    if context and context != FinancialContext.CONSOLIDATED:
         filters.append(Transaction.context == context)
     elif current_user.role == UserRole.MEMBER:
         filters.append(Transaction.context != FinancialContext.PERSONAL)
@@ -106,55 +130,77 @@ async def get_cashflow_series(
 
     for tx in transactions:
         tx_dt = tx.date if tx.date.tzinfo else tx.date.replace(tzinfo=timezone.utc)
-        day_str = tx_dt.strftime("%Y-%m-%d")
+        if granularity == "month":
+            bucket_key = tx_dt.strftime("%Y-%m")
+        elif granularity == "week":
+            monday = tx_dt.date() - timedelta(days=tx_dt.weekday())
+            bucket_key = monday.strftime("%Y-%m-%d")
+        else:
+            bucket_key = tx_dt.strftime("%Y-%m-%d")
 
-        if day_str not in points_dict:
-            points_dict[day_str] = {"income": Decimal("0.00"), "expenses": Decimal("0.00")}
+        if bucket_key not in points_dict:
+            points_dict[bucket_key] = {"income": Decimal("0.00"), "expenses": Decimal("0.00")}
 
         amt = abs(tx.amount)
         if tx.type == TransactionType.INCOME:
-            points_dict[day_str]["income"] += amt
+            points_dict[bucket_key]["income"] += amt
             total_income += amt
         elif tx.type in (TransactionType.EXPENSE, TransactionType.REFUND):
             if tx.type == TransactionType.REFUND:
                 # Estorno reduz a despesa
-                points_dict[day_str]["expenses"] -= amt
+                points_dict[bucket_key]["expenses"] -= amt
                 total_expenses -= amt
             else:
-                points_dict[day_str]["expenses"] += amt
+                points_dict[bucket_key]["expenses"] += amt
                 total_expenses += amt
+
+    # Preenche baldes vazios para continuidade visual na série
+    if granularity == "month":
+        curr_y = dt_start.year
+        curr_m = dt_start.month
+        end_y = dt_end.year
+        end_m = dt_end.month
+        while (curr_y < end_y) or (curr_y == end_y and curr_m <= end_m):
+            k = f"{curr_y:04d}-{curr_m:02d}"
+            if k not in points_dict:
+                points_dict[k] = {"income": Decimal("0.00"), "expenses": Decimal("0.00")}
+            curr_m += 1
+            if curr_m > 12:
+                curr_m = 1
+                curr_y += 1
+    elif granularity == "week":
+        curr = dt_start.date() - timedelta(days=dt_start.weekday())
+        end_d = dt_end.date()
+        while curr <= end_d:
+            k = curr.strftime("%Y-%m-%d")
+            if k not in points_dict:
+                points_dict[k] = {"income": Decimal("0.00"), "expenses": Decimal("0.00")}
+            curr += timedelta(days=7)
+    else: # day
+        curr = dt_start.date()
+        end_d = dt_end.date()
+        while curr <= end_d:
+            k = curr.strftime("%Y-%m-%d")
+            if k not in points_dict:
+                points_dict[k] = {"income": Decimal("0.00"), "expenses": Decimal("0.00")}
+            curr += timedelta(days=1)
 
     # Monta pontos ordenados com saldo líquido e saldo acumulado
     points = []
     cumulative = Decimal("0.00")
 
-    # Garante ao menos pontos nos limites se vazio
-    if not points_dict:
-        curr = dt_start.date()
-        end_d = dt_end.date()
-        while curr <= min(end_d, now.date()):
-            d_str = curr.strftime("%Y-%m-%d")
-            points.append({
-                "date": d_str,
-                "income": "0.00",
-                "expenses": "0.00",
-                "net": "0.00",
-                "cumulative_net": "0.00",
-            })
-            curr += timedelta(days=1)
-    else:
-        for d_str in sorted(points_dict.keys()):
-            inc = points_dict[d_str]["income"]
-            exp = points_dict[d_str]["expenses"]
-            net = inc - exp
-            cumulative += net
-            points.append({
-                "date": d_str,
-                "income": str(inc.quantize(Decimal("0.01"))),
-                "expenses": str(exp.quantize(Decimal("0.01"))),
-                "net": str(net.quantize(Decimal("0.01"))),
-                "cumulative_net": str(cumulative.quantize(Decimal("0.01"))),
-            })
+    for d_str in sorted(points_dict.keys()):
+        inc = points_dict[d_str]["income"]
+        exp = points_dict[d_str]["expenses"]
+        net = inc - exp
+        cumulative += net
+        points.append({
+            "date": d_str,
+            "income": str(inc.quantize(Decimal("0.01"))),
+            "expenses": str(exp.quantize(Decimal("0.01"))),
+            "net": str(net.quantize(Decimal("0.01"))),
+            "cumulative_net": str(cumulative.quantize(Decimal("0.01"))),
+        })
 
     total_net = total_income - total_expenses
 

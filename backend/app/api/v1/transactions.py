@@ -26,6 +26,8 @@ async def list_transactions(
     transaction_type: Optional[TransactionType] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
+    search: Optional[str] = None,
+    uncategorized_only: Optional[bool] = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     current_user: User = Depends(require_user),
@@ -49,7 +51,7 @@ async def list_transactions(
         else:
             base_filter = []
 
-    if context:
+    if context and context != FinancialContext.CONSOLIDATED:
         base_filter.append(Transaction.context == context)
     if transaction_type:
         base_filter.append(Transaction.type == transaction_type)
@@ -57,6 +59,10 @@ async def list_transactions(
         base_filter.append(Transaction.date >= from_date)
     if to_date:
         base_filter.append(Transaction.date <= to_date)
+    if search and search.strip():
+        base_filter.append(Transaction.description.ilike(f"%{search.strip()}%"))
+    if uncategorized_only:
+        base_filter.append(Transaction.category_id.is_(None))
 
     # Contagem total
     count_stmt = select(func.count(Transaction.id)).where(*base_filter)

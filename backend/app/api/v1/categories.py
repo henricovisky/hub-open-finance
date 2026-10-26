@@ -112,7 +112,7 @@ async def get_categories_summary(
         cur_filters.append(Transaction.account_id.in_(authorized_acc_ids))
         prev_filters.append(Transaction.account_id.in_(authorized_acc_ids))
 
-    if context:
+    if context and context != FinancialContext.CONSOLIDATED:
         cur_filters.append(Transaction.context == context)
         prev_filters.append(Transaction.context == context)
     elif current_user.role == UserRole.MEMBER:
@@ -193,7 +193,7 @@ async def list_categories(
 
     if current_user.role != UserRole.ADMIN:
         stmt = stmt.where(Category.context == FinancialContext.HOUSEHOLD)
-    elif context:
+    elif context and context != FinancialContext.CONSOLIDATED:
         stmt = stmt.where(Category.context == context)
 
     result = await db.execute(stmt)

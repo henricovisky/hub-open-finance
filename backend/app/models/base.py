@@ -30,12 +30,14 @@ class FinancialContext(str, enum.Enum):
     """
     Contextos atribuídos dinamicamente pelo Administrador na plataforma.
     Nenhuma conta é acoplada fixamente em código.
+    CONSOLIDATED representa a visão unificada de todos os contextos.
     """
     HOUSEHOLD = "HOUSEHOLD"
     PERSONAL = "PERSONAL"
     INVESTMENT = "INVESTMENT"
     WORK = "WORK"
     OTHER = "OTHER"
+    CONSOLIDATED = "CONSOLIDATED"
 
 
 class UserRole(str, enum.Enum):
