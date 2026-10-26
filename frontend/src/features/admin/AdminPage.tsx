@@ -26,6 +26,9 @@ export function AdminPage() {
   const queryClient = useQueryClient();
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectStatus, setConnectStatus] = useState<string | null>(null);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetStatus, setResetStatus] = useState<string | null>(null);
 
   // 1. Busca Conexões Ativas
   const { data: connections = [], isLoading: isConnectionsLoading } = useQuery({
@@ -63,6 +66,22 @@ export function AdminPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-connections'] });
+    },
+  });
+
+  // 3.1. Limpeza / Reset Total de Dados Financeiros
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      return await api.post<any>('/admin/reset-data', {});
+    },
+    onSuccess: (data) => {
+      setResetStatus(data?.message || 'Dados limpos com sucesso! Aplicação zerada.');
+      setIsResetModalOpen(false);
+      setResetConfirmText('');
+      queryClient.invalidateQueries();
+    },
+    onError: (err: any) => {
+      setResetStatus(`Erro ao limpar base: ${err.message || 'Falha na requisição'}`);
     },
   });
 
@@ -284,6 +303,25 @@ export function AdminPage() {
         </div>
       </div>
 
+      {/* Banner de Estado da Limpeza */}
+      {resetStatus && (
+        <div className={clsx(
+          'p-3.5 rounded-xl border text-xs flex items-center justify-between',
+          resetStatus.includes('Erro')
+            ? 'bg-danger-bg text-danger border-danger/30'
+            : 'bg-income-bg text-income border-income/30'
+        )}>
+          <span>{resetStatus}</span>
+          <button
+            type="button"
+            onClick={() => setResetStatus(null)}
+            className="text-[11px] font-bold hover:underline"
+          >
+            Fechar
+          </button>
+        </div>
+      )}
+
       {/* 3. Timeline de Auditoria Técnica (T-06) */}
       <div className="bg-card border border-border rounded-card p-4 sm:p-5 shadow-card space-y-3">
         <h2 className="text-sm font-bold text-text-primary">Histórico de Eventos & Sincronização (T-06)</h2>
@@ -295,6 +333,95 @@ export function AdminPage() {
           <Timeline items={auditEvents} />
         )}
       </div>
+
+      {/* 4. Zona de Perigo: Limpeza / Reset Total de Dados */}
+      <div className="bg-danger-bg/40 border border-danger/30 rounded-card p-4 sm:p-5 space-y-3">
+        <div className="flex items-center gap-2 text-danger">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <h2 className="text-sm font-bold">Zona de Perigo — Limpeza do Banco de Dados</h2>
+        </div>
+        <p className="text-xs text-text-secondary leading-relaxed">
+          Esta ação limpa permanentemente todas as <strong>conexões bancárias, contas correntes, faturas de cartão, investimentos e lançamentos</strong>, retornando o sistema ao estado inicial zerado para novas integrações reais com a Pluggy. Os usuários e credenciais de acesso não são excluídos.
+        </p>
+
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setIsResetModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-danger text-white text-xs font-bold rounded-xl hover:bg-danger/90 shadow-subtle transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Zerar Todos os Dados Financeiros</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Modal de Confirmação de Limpeza com Trava de Segurança */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-elevated space-y-4">
+            <div className="flex items-center gap-2.5 text-danger">
+              <div className="p-2 bg-danger-bg rounded-xl">
+                <Trash2 className="w-5 h-5 text-danger" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Confirmar Limpeza Total</h3>
+                <span className="text-xs text-danger font-semibold">Ação destrutiva e irreversível</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Você está prestes a apagar <strong>todas as conexões bancárias, contas e movimentações</strong> salvas neste banco de dados. Os dados não poderão ser recuperados.
+            </p>
+
+            <div className="space-y-1.5 bg-surface-2 p-3 rounded-xl border border-border">
+              <label htmlFor="confirm-reset-input" className="text-[11px] font-semibold text-text-muted block">
+                Para confirmar, digite <strong className="text-text-primary font-mono select-all">ZERAR</strong> no campo abaixo:
+              </label>
+              <input
+                id="confirm-reset-input"
+                type="text"
+                value={resetConfirmText}
+                onChange={(e) => setResetConfirmText(e.target.value)}
+                placeholder="ZERAR"
+                className="w-full bg-card border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary font-mono uppercase focus:ring-1 focus:ring-danger focus:border-danger outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResetModalOpen(false);
+                  setResetConfirmText('');
+                }}
+                disabled={resetMutation.isPending}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-text-secondary hover:bg-surface-2 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => resetMutation.mutate()}
+                disabled={resetConfirmText !== 'ZERAR' || resetMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-danger text-white text-xs font-bold rounded-xl hover:bg-danger/90 disabled:opacity-40 disabled:cursor-not-allowed shadow-subtle transition-colors"
+              >
+                {resetMutation.isPending ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Limpando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Apagar e Zerar Banco</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

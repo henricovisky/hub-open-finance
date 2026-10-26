@@ -2,16 +2,76 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_admin
 from app.core.database import get_db_session
 from app.jobs.scheduler import get_scheduler_info
 from app.models.connection import ConnectionSyncRun, FinancialConnection, SyncStatus
-from app.models.user import User
+from app.models.finance import Account, Card, Category, Transaction
+from app.models.investment import Bill, Investment, InvestmentTransaction, WealthSnapshot, WealthSnapshotItem
+from app.models.planning import (
+    CategoryColor,
+    Goal,
+    GoalContribution,
+    InsightState,
+    RecurringRule,
+    UserPreference,
+)
+from app.models.user import AccountPermission, AuditLog, FeaturePermission, User
+from app.models.webhook import WebhookEvent
 from app.schemas.connection import ConnectionSyncRunResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.post("/reset-data")
+async def reset_financial_data(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Limpa e zera todos os dados financeiros (transações, contas, conexões, faturas, investimentos),
+    preservando os usuários e credenciais de acesso do sistema (ADMIN).
+    """
+    models_to_clear = [
+        WealthSnapshotItem,
+        WealthSnapshot,
+        InvestmentTransaction,
+        Investment,
+        Bill,
+        Transaction,
+        Card,
+        AccountPermission,
+        FeaturePermission,
+        Account,
+        ConnectionSyncRun,
+        FinancialConnection,
+        GoalContribution,
+        Goal,
+        RecurringRule,
+        UserPreference,
+        CategoryColor,
+        InsightState,
+        WebhookEvent,
+        Category,
+    ]
+    for model in models_to_clear:
+        await db.execute(delete(model))
+
+    audit = AuditLog(
+        actor_user_id=admin.id,
+        action="RESET_FINANCIAL_DATA",
+        entity_type="SYSTEM",
+        metadata_safe={"requested_by": admin.email},
+    )
+    db.add(audit)
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "message": "Todos os dados financeiros foram limpos com sucesso. O sistema está completamente zerado.",
+    }
 
 
 @router.get("/system-status")
