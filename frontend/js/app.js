@@ -1,89 +1,98 @@
 /**
- * Aplicação Mobile-First do Hub Financeiro (Alpine.js)
+ * Hub Financeiro — App State (Alpine.js)
+ * Redesign v2: fluxo de conexão proeminente, estados vazios elegantes.
  */
 
 document.addEventListener("alpine:init", () => {
   Alpine.data("hubApp", () => ({
-    // Sessão
+
+    // ── Autenticação ─────────────────────────────────────
     isAuthenticated: !!window.api.token,
-    currentUser: window.api.user,
-    loginEmail: "admin@exemplo.com",
-    loginPassword: "",
-    loginLoading: false,
-    loginError: "",
+    currentUser:     window.api.user,
+    loginEmail:      "",
+    loginPassword:   "",
+    loginLoading:    false,
+    loginError:      "",
 
-    // Navegação e Contexto
-    activeTab: "dashboard",
-    currentContext: "HOUSEHOLD", // "HOUSEHOLD", "PERSONAL", "ALL"
-    hideValues: localStorage.getItem("hubfin_hide_values") === "true",
+    // ── Navegação ─────────────────────────────────────────
+    activeTab:      "dashboard",
+    currentContext: "HOUSEHOLD",
+    hideValues:     localStorage.getItem("hubfin_hide_values") === "true",
 
-    // Estados de Dados
-    loading: false,
-    overview: null,
-    cashflow: [],
-    categoriesSummary: [],
-    accounts: [],
-    bills: [],
-    transactions: [],
-    investments: [],
-    wealthSummary: null,
-    connections: [],
-    categories: [],
+    navTabs: [
+      { id: "dashboard",    label: "Início",      icon: "layout-dashboard" },
+      { id: "accounts",     label: "Contas",       icon: "credit-card"       },
+      { id: "transactions", label: "Extrato",      icon: "receipt"           },
+      { id: "investments",  label: "Investir",     icon: "trending-up"       },
+      { id: "settings",     label: "Conexões",     icon: "link"              },
+    ],
 
-    // Modais e Drawers
-    editTxModal: {
-      open: false,
-      tx: null,
-      categoryId: "",
-      context: "HOUSEHOLD",
-      isIgnored: false,
+    // ── Dados ─────────────────────────────────────────────
+    loading:          false,
+    overview:         null,
+    cashflow:         [],
+    categoriesSummary:[],
+    accounts:         [],
+    bills:            [],
+    transactions:     [],
+    investments:      [],
+    wealthSummary:    null,
+    connections:      [],
+    categories:       [],
+
+    // ── Importação manual (tab settings inline) ───────────
+    manualItemId: "",
+
+    // ── Modais ────────────────────────────────────────────
+    connectModal: {
+      open:   false,
+      itemId: "",
       saving: false,
     },
-    addConnModal: {
-      open: false,
-      manualItemId: "",
-      saving: false,
+    editTxModal: {
+      open:       false,
+      tx:         null,
+      categoryId: "",
+      context:    "HOUSEHOLD",
+      isIgnored:  false,
+      saving:     false,
     },
     accountDetailModal: {
-      open: false,
-      account: null,
+      open:         false,
+      account:      null,
       ownerContext: "HOUSEHOLD",
-      saving: false,
+      saving:       false,
     },
 
-    // Notificações Toast
-    toast: {
-      show: false,
-      message: "",
-      type: "info", // "info", "success", "error"
-      timeout: null,
-    },
+    // ── Toast ─────────────────────────────────────────────
+    toast: { show: false, message: "", type: "info", timeout: null },
 
+    // ─────────────────────────────────────────────────────
+    // INIT
+    // ─────────────────────────────────────────────────────
     init() {
-      if (this.isAuthenticated) {
-        this.refreshAll();
-      }
+      if (this.isAuthenticated) this.refreshAll();
 
       window.addEventListener("hubfin:unauthorized", () => {
         this.isAuthenticated = false;
-        this.currentUser = null;
+        this.currentUser     = null;
         this.showToast("Sessão expirada. Faça login novamente.", "error");
       });
 
-      // Registra Service Worker se suportado
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("/sw.js").catch(() => {});
       }
     },
 
+    // ─────────────────────────────────────────────────────
+    // UTILITÁRIOS
+    // ─────────────────────────────────────────────────────
     showToast(message, type = "info") {
       this.toast.message = message;
-      this.toast.type = type;
-      this.toast.show = true;
+      this.toast.type    = type;
+      this.toast.show    = true;
       if (this.toast.timeout) clearTimeout(this.toast.timeout);
-      this.toast.timeout = setTimeout(() => {
-        this.toast.show = false;
-      }, 4000);
+      this.toast.timeout = setTimeout(() => { this.toast.show = false; }, 4500);
     },
 
     toggleHideValues() {
@@ -94,31 +103,26 @@ document.addEventListener("alpine:init", () => {
     formatMoney(val) {
       if (val === null || val === undefined) return "R$ 0,00";
       if (this.hideValues) return "R$ •••••";
-      const num = Number(val);
-      return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      return Number(val).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     },
 
     formatDate(val) {
-      if (!val) return "";
+      if (!val) return "—";
       const d = new Date(val);
       return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
     },
 
     formatDateTime(val) {
-      if (!val) return "";
+      if (!val) return "Nunca";
       const d = new Date(val);
-      return d.toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     },
 
+    // ─────────────────────────────────────────────────────
+    // NAVEGAÇÃO
+    // ─────────────────────────────────────────────────────
     setContext(ctx) {
-      if (this.currentUser?.role !== "ADMIN" && ctx !== "HOUSEHOLD") {
-        return; // Membro só acessa Casa
-      }
+      if (this.currentUser?.role !== "ADMIN" && ctx !== "HOUSEHOLD") return;
       this.currentContext = ctx;
       this.refreshCurrentTab();
     },
@@ -128,18 +132,20 @@ document.addEventListener("alpine:init", () => {
       this.refreshCurrentTab();
     },
 
+    // ─────────────────────────────────────────────────────
+    // AUTH
+    // ─────────────────────────────────────────────────────
     async doLogin() {
       if (!this.loginEmail || !this.loginPassword) {
         this.loginError = "Informe e-mail e senha.";
         return;
       }
       this.loginLoading = true;
-      this.loginError = "";
-
+      this.loginError   = "";
       try {
         const resp = await window.api.login(this.loginEmail, this.loginPassword);
         this.isAuthenticated = true;
-        this.currentUser = resp.user;
+        this.currentUser     = resp.user;
         this.showToast(`Bem-vindo, ${resp.user.name}!`, "success");
         await this.refreshAll();
       } catch (err) {
@@ -152,11 +158,14 @@ document.addEventListener("alpine:init", () => {
     async doLogout() {
       await window.api.logout();
       this.isAuthenticated = false;
-      this.currentUser = null;
-      this.overview = null;
+      this.currentUser     = null;
+      this.overview        = null;
       this.showToast("Sessão encerrada.", "info");
     },
 
+    // ─────────────────────────────────────────────────────
+    // CARGA DE DADOS
+    // ─────────────────────────────────────────────────────
     async refreshAll() {
       this.loading = true;
       try {
@@ -165,6 +174,7 @@ document.addEventListener("alpine:init", () => {
           this.loadAccounts(),
           this.loadTransactions(),
           this.loadCategories(),
+          this.loadConnections(),
         ]);
       } catch (e) {
         console.error("Erro ao carregar dados:", e);
@@ -176,11 +186,11 @@ document.addEventListener("alpine:init", () => {
     async refreshCurrentTab() {
       this.loading = true;
       try {
-        if (this.activeTab === "dashboard") await this.loadDashboard();
-        else if (this.activeTab === "accounts") await this.loadAccounts();
+        if      (this.activeTab === "dashboard")    await this.loadDashboard();
+        else if (this.activeTab === "accounts")     await this.loadAccounts();
         else if (this.activeTab === "transactions") await this.loadTransactions();
-        else if (this.activeTab === "investments") await this.loadInvestments();
-        else if (this.activeTab === "settings") await this.loadConnections();
+        else if (this.activeTab === "investments")  await this.loadInvestments();
+        else if (this.activeTab === "settings")     await this.loadConnections();
       } finally {
         this.loading = false;
       }
@@ -193,8 +203,8 @@ document.addEventListener("alpine:init", () => {
           window.api.getDashboardCashflow(6, this.currentContext),
           window.api.getDashboardCategories(this.currentContext),
         ]);
-        this.overview = ov;
-        this.cashflow = cf;
+        this.overview          = ov;
+        this.cashflow          = cf;
         this.categoriesSummary = cats;
       } catch (err) {
         this.showToast(`Erro ao atualizar dashboard: ${err.message}`, "error");
@@ -208,7 +218,7 @@ document.addEventListener("alpine:init", () => {
           window.api.listBills(),
         ]);
         this.accounts = accs;
-        this.bills = billsData;
+        this.bills    = billsData;
       } catch (err) {
         this.showToast(`Erro ao carregar contas: ${err.message}`, "error");
       }
@@ -217,8 +227,8 @@ document.addEventListener("alpine:init", () => {
     async loadTransactions() {
       try {
         const data = await window.api.listTransactions({
-          context: this.currentContext,
-          page_size: 50,
+          context:   this.currentContext,
+          page_size: 60,
         });
         this.transactions = data.results || [];
       } catch (err) {
@@ -232,7 +242,7 @@ document.addEventListener("alpine:init", () => {
           window.api.listInvestments(),
           window.api.getWealthSummary(),
         ]);
-        this.investments = invs;
+        this.investments  = invs;
         this.wealthSummary = wealth;
       } catch (err) {
         this.showToast(`Erro ao carregar investimentos: ${err.message}`, "error");
@@ -253,132 +263,42 @@ document.addEventListener("alpine:init", () => {
       } catch (e) {}
     },
 
-    // Edição de Transação
-    openEditTx(tx) {
-      this.editTxModal.tx = tx;
-      this.editTxModal.categoryId = tx.category_id || "";
-      this.editTxModal.context = tx.context || "HOUSEHOLD";
-      this.editTxModal.isIgnored = !!tx.is_ignored_in_analytics;
-      this.editTxModal.open = true;
-    },
+    // ─────────────────────────────────────────────────────
+    // CONEXÕES: fluxo principal
+    // ─────────────────────────────────────────────────────
 
-    async saveTransaction() {
-      if (!this.editTxModal.tx) return;
-      this.editTxModal.saving = true;
-
-      try {
-        const payload = {
-          category_id: this.editTxModal.categoryId || null,
-          context: this.editTxModal.context,
-          is_ignored_in_analytics: this.editTxModal.isIgnored,
-        };
-        const updated = await window.api.updateTransaction(this.editTxModal.tx.id, payload);
-
-        // Atualiza na lista local
-        const idx = this.transactions.findIndex((t) => t.id === updated.id);
-        if (idx !== -1) {
-          this.transactions[idx] = updated;
-        }
-
-        this.showToast("Transação atualizada com sucesso!", "success");
-        this.editTxModal.open = false;
-        // Recalcula dashboard
-        this.loadDashboard();
-      } catch (err) {
-        this.showToast(`Falha ao salvar: ${err.message}`, "error");
-      } finally {
-        this.editTxModal.saving = false;
-      }
-    },
-
-    // Edição de Conta
-    openEditAccount(acc) {
+    /** Abre modal de conexão (e navega para aba Conexões se necessário) */
+    openConnectFlow() {
       if (this.currentUser?.role !== "ADMIN") return;
-      this.accountDetailModal.account = acc;
-      this.accountDetailModal.ownerContext = acc.owner_context || "HOUSEHOLD";
-      this.accountDetailModal.open = true;
+      this.connectModal.itemId = "";
+      this.connectModal.open   = true;
     },
 
-    async saveAccountContext() {
-      if (!this.accountDetailModal.account) return;
-      this.accountDetailModal.saving = true;
-
-      try {
-        const updated = await window.api.updateAccount(this.accountDetailModal.account.id, {
-          owner_context: this.accountDetailModal.ownerContext,
-        });
-
-        const idx = this.accounts.findIndex((a) => a.id === updated.id);
-        if (idx !== -1) this.accounts[idx] = updated;
-
-        this.showToast("Contexto da conta alterado com sucesso!", "success");
-        this.accountDetailModal.open = false;
-        this.refreshAll();
-      } catch (err) {
-        this.showToast(`Falha ao alterar conta: ${err.message}`, "error");
-      } finally {
-        this.accountDetailModal.saving = false;
-      }
-    },
-
-    // Sincronização e Conexões
-    async triggerSync(connId) {
-      this.showToast("Iniciando sincronização da instituição...", "info");
-      try {
-        const run = await window.api.syncConnection(connId);
-        this.showToast(
-          `Sincronização concluída! ${run.records_inserted} adicionados, ${run.records_updated} atualizados.`,
-          "success"
-        );
-        this.refreshAll();
-      } catch (err) {
-        this.showToast(`Erro na sincronização: ${err.message}`, "error");
-      }
-    },
-
-    async importExistingItem() {
-      const itemId = this.addConnModal.manualItemId.trim();
-      if (!itemId) {
-        this.showToast("Informe o ID do Item da Pluggy.", "error");
+    /** Abre o Widget Pluggy Connect dentro do modal */
+    async openPluggyWidget() {
+      if (!window.PluggyConnect) {
+        this.showToast("Widget Pluggy não disponível. Verifique conexão à internet.", "error");
         return;
       }
-
-      this.addConnModal.saving = true;
+      this.showToast("Emitindo Connect Token temporário…", "info");
       try {
-        const conn = await window.api.completeConnection(itemId);
-        this.showToast(`Conexão ${conn.institution_name} vinculada! Sincronizando...`, "success");
-        this.addConnModal.open = false;
-        this.addConnModal.manualItemId = "";
-        await this.triggerSync(conn.id);
-      } catch (err) {
-        this.showToast(`Falha ao importar item: ${err.message}`, "error");
-      } finally {
-        this.addConnModal.saving = false;
-      }
-    },
-
-    async openPluggyConnect() {
-      this.showToast("Emitindo Connect Token temporário...", "info");
-      try {
-        const tokenResp = await window.api.getConnectToken();
+        const tokenResp    = await window.api.getConnectToken();
         const connectToken = tokenResp.connect_token;
-
-        if (!window.PluggyConnect) {
-          this.showToast("Widget Pluggy indisponível. Verifique conexão à internet.", "error");
-          return;
-        }
+        this.connectModal.open = false;
 
         const pluggyConnect = new window.PluggyConnect({
-          connectToken: connectToken,
+          connectToken,
           includeSandbox: true,
           onSuccess: async (itemData) => {
-            this.showToast(`Instituição conectada na Pluggy! Concluindo registro...`, "info");
+            this.showToast("Instituição conectada! Registrando…", "info");
             try {
               const conn = await window.api.completeConnection(itemData.item.id);
-              this.showToast(`Conexão ${conn.institution_name} criada com sucesso!`, "success");
+              this.showToast(`${conn.institution_name} conectada! Sincronizando…`, "success");
               await this.triggerSync(conn.id);
+              await this.loadConnections();
+              await this.loadAccounts();
             } catch (err) {
-              this.showToast(`Erro ao registrar conexão: ${err.message}`, "error");
+              this.showToast(`Erro ao registrar: ${err.message}`, "error");
             }
           },
           onError: (err) => {
@@ -391,5 +311,135 @@ document.addEventListener("alpine:init", () => {
         this.showToast(`Erro ao iniciar widget: ${err.message}`, "error");
       }
     },
+
+    /** Importar Item ID existente (dentro do modal) */
+    async importByItemId() {
+      const itemId = (this.connectModal.itemId || "").trim();
+      if (!itemId) {
+        this.showToast("Informe o ID do Item da Pluggy.", "error");
+        return;
+      }
+      this.connectModal.saving = true;
+      try {
+        const conn = await window.api.completeConnection(itemId);
+        this.showToast(`${conn.institution_name} vinculada! Sincronizando…`, "success");
+        this.connectModal.open   = false;
+        this.connectModal.itemId = "";
+        await this.triggerSync(conn.id);
+        await this.loadConnections();
+        await this.loadAccounts();
+      } catch (err) {
+        this.showToast(`Falha ao importar: ${err.message}`, "error");
+      } finally {
+        this.connectModal.saving = false;
+      }
+    },
+
+    /** Importar Item ID (campo inline na tab settings) */
+    async importExistingItem(itemId) {
+      const id = (itemId || this.manualItemId || "").trim();
+      if (!id) {
+        this.showToast("Informe o ID do Item da Pluggy.", "error");
+        return;
+      }
+      this.showToast("Vinculando…", "info");
+      try {
+        const conn = await window.api.completeConnection(id);
+        this.showToast(`${conn.institution_name} vinculada! Sincronizando…`, "success");
+        this.manualItemId = "";
+        await this.triggerSync(conn.id);
+        await this.loadConnections();
+        await this.loadAccounts();
+      } catch (err) {
+        this.showToast(`Falha ao importar: ${err.message}`, "error");
+      }
+    },
+
+    async triggerSync(connId) {
+      this.showToast("Iniciando sincronização…", "info");
+      try {
+        const run = await window.api.syncConnection(connId);
+        this.showToast(
+          `Sync concluído! +${run.records_inserted} novos, ${run.records_updated} atualizados.`,
+          "success"
+        );
+        await this.refreshAll();
+      } catch (err) {
+        this.showToast(`Erro na sincronização: ${err.message}`, "error");
+      }
+    },
+
+    async deleteConnection(connId) {
+      if (!confirm("Remover esta conexão? Os dados locais serão mantidos.")) return;
+      try {
+        await window.api.deleteConnection(connId);
+        this.showToast("Conexão removida.", "success");
+        this.connections = this.connections.filter((c) => c.id !== connId);
+      } catch (err) {
+        this.showToast(`Erro ao remover: ${err.message}`, "error");
+      }
+    },
+
+    // ─────────────────────────────────────────────────────
+    // EDIÇÃO DE TRANSAÇÃO
+    // ─────────────────────────────────────────────────────
+    openEditTx(tx) {
+      this.editTxModal.tx         = tx;
+      this.editTxModal.categoryId = tx.category_id  || "";
+      this.editTxModal.context    = tx.context       || "HOUSEHOLD";
+      this.editTxModal.isIgnored  = !!tx.is_ignored_in_analytics;
+      this.editTxModal.open       = true;
+    },
+
+    async saveTransaction() {
+      if (!this.editTxModal.tx) return;
+      this.editTxModal.saving = true;
+      try {
+        const updated = await window.api.updateTransaction(this.editTxModal.tx.id, {
+          category_id:            this.editTxModal.categoryId || null,
+          context:                this.editTxModal.context,
+          is_ignored_in_analytics: this.editTxModal.isIgnored,
+        });
+        const idx = this.transactions.findIndex((t) => t.id === updated.id);
+        if (idx !== -1) this.transactions[idx] = updated;
+        this.showToast("Transação atualizada!", "success");
+        this.editTxModal.open = false;
+        this.loadDashboard();
+      } catch (err) {
+        this.showToast(`Falha ao salvar: ${err.message}`, "error");
+      } finally {
+        this.editTxModal.saving = false;
+      }
+    },
+
+    // ─────────────────────────────────────────────────────
+    // EDIÇÃO DE CONTA
+    // ─────────────────────────────────────────────────────
+    openEditAccount(acc) {
+      if (this.currentUser?.role !== "ADMIN") return;
+      this.accountDetailModal.account      = acc;
+      this.accountDetailModal.ownerContext = acc.owner_context || "HOUSEHOLD";
+      this.accountDetailModal.open         = true;
+    },
+
+    async saveAccountContext() {
+      if (!this.accountDetailModal.account) return;
+      this.accountDetailModal.saving = true;
+      try {
+        const updated = await window.api.updateAccount(this.accountDetailModal.account.id, {
+          owner_context: this.accountDetailModal.ownerContext,
+        });
+        const idx = this.accounts.findIndex((a) => a.id === updated.id);
+        if (idx !== -1) this.accounts[idx] = updated;
+        this.showToast("Contexto alterado!", "success");
+        this.accountDetailModal.open = false;
+        await this.refreshAll();
+      } catch (err) {
+        this.showToast(`Falha: ${err.message}`, "error");
+      } finally {
+        this.accountDetailModal.saving = false;
+      }
+    },
+
   }));
 });
