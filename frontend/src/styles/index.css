@@ -1,0 +1,20 @@
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-canvas text-text-primary antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Accessibility minimum touch target for compact */
+  @media (max-width: 639px) {
+    button, [role="button"], a {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+}

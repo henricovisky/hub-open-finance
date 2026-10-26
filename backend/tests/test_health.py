@@ -35,8 +35,8 @@ async def test_health_check_unhealthy(async_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_frontend_index_served(async_client: AsyncClient):
-    """Testa se a página raiz entrega o HTML do frontend PWA."""
+    """Testa se a página raiz entrega o HTML do frontend SPA."""
     response = await async_client.get("/")
     assert response.status_code == 200
     assert "Hub Financeiro" in response.text
-    assert "hubApp" in response.text
+    assert "root" in response.text

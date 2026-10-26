@@ -32,6 +32,17 @@ from app.models.user import (
     User,
     UserSession,
 )
+from app.models.planning import (
+    CategoryColor,
+    Goal,
+    GoalContribution,
+    GoalContributionSource,
+    GoalStatus,
+    InsightState,
+    RecurringRule,
+    RecurringStatus,
+    UserPreference,
+)
 from app.models.webhook import WebhookEvent, WebhookEventStatus
 
 __all__ = [
@@ -66,4 +77,13 @@ __all__ = [
     "WealthSnapshotItem",
     "WebhookEvent",
     "WebhookEventStatus",
+    "Goal",
+    "GoalStatus",
+    "GoalContribution",
+    "GoalContributionSource",
+    "RecurringRule",
+    "RecurringStatus",
+    "UserPreference",
+    "CategoryColor",
+    "InsightState",
 ]

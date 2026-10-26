@@ -1,6 +1,6 @@
 import uuid
 from datetime import date
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -150,4 +150,60 @@ async def update_transaction(
     await db.commit()
     await db.refresh(tx)
     return TransactionResponse.model_validate(tx)
+
+
+from pydantic import BaseModel
+
+class BulkTransactionUpdate(BaseModel):
+    transaction_ids: List[uuid.UUID]
+    category_id: Optional[uuid.UUID] = None
+    context: Optional[FinancialContext] = None
+    is_ignored_in_analytics: Optional[bool] = None
+
+
+@router.patch("/bulk")
+async def bulk_update_transactions(
+    payload: BulkTransactionUpdate,
+    current_user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Atualiza transações em lote (categorização e contexto).
+    Valida permissão can_categorize item a item. Conforme 04 Adendo §6.
+    """
+    if not payload.transaction_ids:
+        return {"updated_count": 0}
+
+    stmt = select(Transaction).where(Transaction.id.in_(payload.transaction_ids))
+    result = await db.execute(stmt)
+    txs = list(result.scalars().all())
+
+    if current_user.role != UserRole.ADMIN:
+        account_ids = {t.account_id for t in txs}
+        perm_stmt = select(AccountPermission.account_id).where(
+            AccountPermission.user_id == current_user.id,
+            AccountPermission.account_id.in_(account_ids),
+            AccountPermission.can_categorize == True,
+        )
+        allowed_acc_ids = set((await db.execute(perm_stmt)).scalars().all())
+    else:
+        allowed_acc_ids = None
+
+    updated_count = 0
+    for tx in txs:
+        if allowed_acc_ids is not None and tx.account_id not in allowed_acc_ids:
+            continue
+
+        if payload.category_id is not None:
+            tx.category_id = payload.category_id
+        if payload.context is not None:
+            tx.context = payload.context
+        if payload.is_ignored_in_analytics is not None:
+            tx.is_ignored_in_analytics = payload.is_ignored_in_analytics
+
+        updated_count += 1
+
+    await db.commit()
+    return {"updated_count": updated_count}
+
 

@@ -52,6 +52,16 @@ postgres_data/
 *.db
 
 # ==========================================
+# Node.js e Frontend
+# ==========================================
+node_modules/
+frontend/node_modules/
+frontend_legacy/
+.npm/
+!frontend/dist/
+!frontend/dist/**
+
+# ==========================================
 # Logs e Arquivos Temporários
 # ==========================================
 *.log
