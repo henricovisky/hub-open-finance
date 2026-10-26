@@ -66,7 +66,7 @@ if static_target:
     if (static_target / "assets").exists():
         app.mount("/assets", StaticFiles(directory=str(static_target / "assets")), name="assets")
 
-    @app.get("/{full_path:path}")
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
     async def serve_spa(full_path: str):
         file_path = static_target / full_path
         if full_path and file_path.is_file():
