@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from app.schemas.user import UserResponse
 
 
 class LoginRequest(BaseModel):
@@ -19,3 +20,4 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in_seconds: int
+    user: Optional[UserResponse] = None

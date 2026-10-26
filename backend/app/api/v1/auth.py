@@ -7,6 +7,7 @@ from app.core.database import get_db_session
 from app.models.user import User
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
 from app.schemas.user import UserResponse
+from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -62,6 +63,7 @@ async def login(
         refresh_token=raw_refresh,
         token_type="bearer",
         expires_in_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=UserResponse.model_validate(user),
     )
 
 

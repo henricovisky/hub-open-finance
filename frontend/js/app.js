@@ -9,7 +9,7 @@ document.addEventListener("alpine:init", () => {
     // ── Autenticação ─────────────────────────────────────
     isAuthenticated: !!window.api.token,
     currentUser:     window.api.user,
-    loginEmail:      "",
+    loginEmail:      "admin@exemplo.com",
     loginPassword:   "",
     loginLoading:    false,
     loginError:      "",
@@ -70,8 +70,18 @@ document.addEventListener("alpine:init", () => {
     // ─────────────────────────────────────────────────────
     // INIT
     // ─────────────────────────────────────────────────────
-    init() {
-      if (this.isAuthenticated) this.refreshAll();
+    async init() {
+      if (this.isAuthenticated) {
+        if (!this.currentUser) {
+          try {
+            this.currentUser = await window.api.getMe();
+            window.api.setSession(window.api.token, this.currentUser);
+          } catch (e) {
+            console.warn("Falha ao recuperar perfil:", e);
+          }
+        }
+        this.refreshAll();
+      }
 
       window.addEventListener("hubfin:unauthorized", () => {
         this.isAuthenticated = false;
