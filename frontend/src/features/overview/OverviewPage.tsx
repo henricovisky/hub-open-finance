@@ -10,7 +10,6 @@ import { CategoryBars } from '@/components/charts/CategoryBars';
 import { formatMoney } from '@/lib/format';
 import { useTheme } from '@/app/providers/ThemeProvider';
 import { Wallet, TrendingUp, TrendingDown, DollarSign, CreditCard, Calendar, ArrowRight } from 'lucide-react';
-import { mockCashflowSeries } from '@/mocks/fixtures/cashflow';
 
 export function OverviewPage() {
   const [searchParams] = useSearchParams();
@@ -41,37 +40,45 @@ export function OverviewPage() {
         const res = await api.get<any>('/cashflow/series', { context, period, granularity: 'day' });
         return res;
       } catch {
-        // Fallback para mock enquanto o endpoint não estiver montado
-        return mockCashflowSeries;
+        return { data: { points: [], totals: { income: '0.00', expenses: '0.00', net: '0.00' } } };
       }
     },
   });
 
   // 3. Busca Categorias vs Média (G-05)
-  const { data: categoriesData, isLoading: isCategoriesLoading } = useQuery({
+  const { data: categoriesData = [], isLoading: isCategoriesLoading } = useQuery({
     queryKey: ['categories-summary', context, period],
     queryFn: async () => {
       try {
         const res = await api.get<any>('/categories/summary', { context, period });
-        return res.data || res;
+        return res.data || res || [];
       } catch {
-        return [
-          { id: '1', name: 'Supermercado', current_amount: 1450.0, average_3m: 1200.0, difference_percent: 20.8 },
-          { id: '2', name: 'Moradia / Aluguel', current_amount: 2800.0, average_3m: 2800.0, difference_percent: 0.0 },
-          { id: '3', name: 'Transporte', current_amount: 450.0, average_3m: 600.0, difference_percent: -25.0 },
-          { id: '4', name: 'Lazer', current_amount: 890.0, average_3m: 750.0, difference_percent: 18.6 },
-        ];
+        return [];
+      }
+    },
+  });
+
+  // 4. Busca Cartões Ativos
+  const { data: cards = [] } = useQuery({
+    queryKey: ['overview-cards', context],
+    queryFn: async () => {
+      try {
+        const res = await api.get<any>('/cards', { context });
+        return res.data || res || [];
+      } catch {
+        return [];
       }
     },
   });
 
   const totals = cashflowData?.data?.totals || overviewData?.totals || {
-    income: '9900.00',
-    expenses: '3942.55',
-    net: '5957.45',
+    income: '0.00',
+    expenses: '0.00',
+    net: '0.00',
   };
 
-  const points = cashflowData?.data?.points || mockCashflowSeries.data.points;
+  const points = cashflowData?.data?.points || [];
+  const primaryCard = cards[0] || null;
 
   return (
     <div className="space-y-6">
@@ -100,7 +107,7 @@ export function OverviewPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard
           title="Saldo Disponível"
-          value={overviewData?.available_balance || '15420.50'}
+          value={overviewData?.available_balance || '0.00'}
           icon={<Wallet className="w-4 h-4 text-primary" />}
           subtitle="Soma das contas ativas"
           isLoading={isOverviewLoading}
@@ -109,21 +116,20 @@ export function OverviewPage() {
           title="Entradas no Mês"
           value={totals.income}
           icon={<TrendingUp className="w-4 h-4 text-income" />}
-          delta={{ percent: 8.5, isGood: true, text: 'vs mês passado' }}
+          delta={totals.income !== '0.00' ? { percent: 0, isGood: true, text: 'período atual' } : undefined}
           isLoading={isCashflowLoading}
         />
         <KpiCard
           title="Saídas no Mês"
           value={totals.expenses}
           icon={<TrendingDown className="w-4 h-4 text-expense" />}
-          delta={{ percent: -12.3, isGood: true, text: 'vs mês passado' }}
+          delta={totals.expenses !== '0.00' ? { percent: 0, isGood: false, text: 'período atual' } : undefined}
           isLoading={isCashflowLoading}
         />
         <KpiCard
           title="Saldo Líquido"
           value={totals.net}
           icon={<DollarSign className="w-4 h-4 text-primary" />}
-          delta={{ percent: 24.1, isGood: true }}
           isLoading={isCashflowLoading}
         />
       </div>
@@ -147,29 +153,42 @@ export function OverviewPage() {
               </button>
             }
             tableAlternative={
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="border-b border-border text-text-muted">
-                    <th className="py-2">Data</th>
-                    <th className="py-2 text-right">Entradas</th>
-                    <th className="py-2 text-right">Saídas</th>
-                    <th className="py-2 text-right">Líquido</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {points.map((pt: any) => (
-                    <tr key={pt.date} className="border-b border-border/50 tabular-nums">
-                      <td className="py-2 font-medium">{pt.date}</td>
-                      <td className="py-2 text-right text-income">R$ {pt.income}</td>
-                      <td className="py-2 text-right text-expense">R$ {pt.expenses}</td>
-                      <td className="py-2 text-right font-semibold">R$ {pt.net}</td>
+              points.length === 0 ? (
+                <div className="py-8 text-center text-xs text-text-muted">
+                  Nenhuma movimentação registrada no período selecionado.
+                </div>
+              ) : (
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="border-b border-border text-text-muted">
+                      <th className="py-2">Data</th>
+                      <th className="py-2 text-right">Entradas</th>
+                      <th className="py-2 text-right">Saídas</th>
+                      <th className="py-2 text-right">Líquido</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {points.map((pt: any) => (
+                      <tr key={pt.date} className="border-b border-border/50 tabular-nums">
+                        <td className="py-2 font-medium">{pt.date}</td>
+                        <td className="py-2 text-right text-income">R$ {pt.income}</td>
+                        <td className="py-2 text-right text-expense">R$ {pt.expenses}</td>
+                        <td className="py-2 text-right font-semibold">R$ {pt.net}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
             }
           >
-            <FlowChart points={points} height="280px" />
+            {points.length === 0 ? (
+              <div className="h-[280px] flex flex-col items-center justify-center text-xs text-text-muted">
+                <span>Nenhum lançamento no período.</span>
+                <span className="text-[11px] mt-1">Conecte sua instituição financeira para carregar o histórico.</span>
+              </div>
+            ) : (
+              <FlowChart points={points} height="280px" />
+            )}
           </ChartCard>
         </div>
 
@@ -190,18 +209,22 @@ export function OverviewPage() {
                 Detalhes
               </button>
             </div>
-            <div className="mt-3 space-y-3">
-              <div>
-                <span className="text-xs text-text-muted block">Nubank Ultravioleta (•••• 4921)</span>
-                <span className="text-xl font-bold text-text-primary tabular-nums">
-                  {formatMoney('2450.00', hideValues)}
-                </span>
+            {primaryCard ? (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <span className="text-xs text-text-muted block">
+                    {primaryCard.name} (•••• {primaryCard.last_four_digits || '0000'})
+                  </span>
+                  <span className="text-xl font-bold text-text-primary tabular-nums">
+                    {formatMoney(primaryCard.current_balance || '0.00', hideValues)}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-xs text-text-secondary bg-surface-2 p-2 rounded-lg">
-                <span>Fecha em: <strong>24/10</strong></span>
-                <span>Vence em: <strong className="text-expense">28/10</strong></span>
+            ) : (
+              <div className="py-6 text-center text-xs text-text-muted">
+                Nenhum cartão de crédito ativo conectado.
               </div>
-            </div>
+            )}
           </div>
 
           {/* Próximos Compromissos */}
@@ -219,22 +242,8 @@ export function OverviewPage() {
                 Agenda
               </button>
             </div>
-            <div className="mt-3 space-y-2">
-              {[
-                { title: 'Fatura Nubank', date: '28/10', amount: '2450.00', isExpense: true },
-                { title: 'Aluguel Apartamento', date: '30/10', amount: '2800.00', isExpense: true },
-                { title: 'Aporte Investimentos', date: '05/11', amount: '1500.00', isExpense: false },
-              ].map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs py-1.5 border-b border-border/50 last:border-0">
-                  <div>
-                    <span className="font-semibold text-text-primary block">{item.title}</span>
-                    <span className="text-[11px] text-text-muted">Vence em {item.date}</span>
-                  </div>
-                  <span className="font-bold tabular-nums text-text-primary">
-                    {formatMoney(item.amount, hideValues)}
-                  </span>
-                </div>
-              ))}
+            <div className="py-6 text-center text-xs text-text-muted">
+              Nenhum vencimento pendente para os próximos dias.
             </div>
           </div>
         </div>
@@ -256,36 +265,49 @@ export function OverviewPage() {
           </button>
         }
         tableAlternative={
-          <table className="w-full text-xs text-left">
-            <thead>
-              <tr className="border-b border-border text-text-muted">
-                <th className="py-2">Categoria</th>
-                <th className="py-2 text-right">Atual</th>
-                <th className="py-2 text-right">Média 3M</th>
-                <th className="py-2 text-right">Variação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {categoriesData?.map((c: any) => (
-                <tr key={c.id} className="border-b border-border/50 tabular-nums">
-                  <td className="py-2 font-medium">{c.name}</td>
-                  <td className="py-2 text-right font-semibold">
-                    {formatMoney(c.current_amount, hideValues)}
-                  </td>
-                  <td className="py-2 text-right text-text-muted">
-                    {formatMoney(c.average_3m, hideValues)}
-                  </td>
-                  <td className="py-2 text-right font-bold">
-                    {c.difference_percent > 0 ? '+' : ''}
-                    {c.difference_percent?.toFixed(1)}%
-                  </td>
+          categoriesData.length === 0 ? (
+            <div className="py-8 text-center text-xs text-text-muted">
+              Nenhum gasto por categoria registrado no período.
+            </div>
+          ) : (
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="border-b border-border text-text-muted">
+                  <th className="py-2">Categoria</th>
+                  <th className="py-2 text-right">Atual</th>
+                  <th className="py-2 text-right">Média 3M</th>
+                  <th className="py-2 text-right">Variação</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {categoriesData.map((c: any) => (
+                  <tr key={c.id} className="border-b border-border/50 tabular-nums">
+                    <td className="py-2 font-medium">{c.name}</td>
+                    <td className="py-2 text-right font-semibold">
+                      {formatMoney(c.current_amount, hideValues)}
+                    </td>
+                    <td className="py-2 text-right text-text-muted">
+                      {formatMoney(c.average_3m, hideValues)}
+                    </td>
+                    <td className="py-2 text-right font-bold">
+                      {c.difference_percent > 0 ? '+' : ''}
+                      {c.difference_percent?.toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
         }
       >
-        <CategoryBars categories={categoriesData || []} height="280px" />
+        {categoriesData.length === 0 ? (
+          <div className="h-[280px] flex flex-col items-center justify-center text-xs text-text-muted">
+            <span>Nenhuma despesa categorizada neste período.</span>
+            <span className="text-[11px] mt-1">Conecte seus extratos para visualizar os comparativos.</span>
+          </div>
+        ) : (
+          <CategoryBars categories={categoriesData} height="280px" />
+        )}
       </ChartCard>
     </div>
   );

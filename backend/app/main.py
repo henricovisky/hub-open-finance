@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.init_db import init_db
 from app.jobs.scheduler import shutdown_scheduler, start_scheduler
 
 
@@ -11,6 +12,9 @@ from app.jobs.scheduler import shutdown_scheduler, start_scheduler
 async def lifespan(app: FastAPI):
     # Setup de logging estruturado
     setup_logging(level="DEBUG" if settings.DEBUG else "INFO")
+
+    # Inicialização resiliente do banco e esquemas
+    await init_db()
 
     # Inicia o agendador em segundo plano (em produção / dev)
     start_scheduler()

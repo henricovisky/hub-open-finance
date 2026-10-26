@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api/client';
 import { CalendarMonth, CalendarEvent } from '@/components/timeline/CalendarMonth';
 import { Timeline, TimelineItem } from '@/components/timeline/Timeline';
 import { ChartCard } from '@/components/ui/ChartCard';
@@ -13,19 +15,28 @@ export function AgendaPage() {
   const { hideValues } = useTheme();
   const [includeEstimates, setIncludeEstimates] = useState(true);
 
-  const demoEvents: CalendarEvent[] = [
-    { id: '1', date: '2026-10-24', title: 'Fechamento Nubank', amount: '2450.00', type: 'BILL_CLOSING' },
-    { id: '2', date: '2026-10-28', title: 'Vencimento Nubank', amount: '2450.00', type: 'BILL_DUE' },
-    { id: '3', date: '2026-10-30', title: 'Aluguel Apartamento', amount: '2800.00', type: 'RECURRING' },
-    { id: '4', date: '2026-11-05', title: 'Salário Empresa XYZ', amount: '8200.00', type: 'INCOME_EXPECTED' },
-  ];
+  const context = searchParams.get('context') || 'HOUSEHOLD';
 
-  const demoCommitments: TimelineItem[] = [
-    { id: 'c1', kind: 'BILL_CLOSING', date: '2026-10-24', title: 'Fechamento Nubank', amount: '2450.00' },
-    { id: 'c2', kind: 'TRANSACTION', date: '2026-10-28', title: 'Pagamento Fatura Nubank', amount: '2450.00', type: 'EXPENSE' },
-    { id: 'c3', kind: 'TRANSACTION', date: '2026-10-30', title: 'Aluguel & Condomínio', amount: '2800.00', type: 'EXPENSE', certainty: 'CONFIRMED' },
-    { id: 'c4', kind: 'TRANSACTION', date: '2026-11-05', title: 'Recebimento de Salário', amount: '8200.00', type: 'INCOME', certainty: 'ESTIMATED' },
-  ];
+  const { data: events = [], isLoading } = useQuery({
+    queryKey: ['agenda-events', context],
+    queryFn: async () => {
+      try {
+        const res = await api.get<any>('/agenda', { context });
+        return res.data || res || [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const demoCommitments: TimelineItem[] = events.map((e: any) => ({
+    id: e.id,
+    kind: e.type || 'TRANSACTION',
+    date: e.date,
+    title: e.title || e.description,
+    amount: e.amount,
+    certainty: e.certainty || 'CONFIRMED',
+  }));
 
   const filteredCommitments = includeEstimates
     ? demoCommitments
@@ -54,7 +65,7 @@ export function AgendaPage() {
       {/* Grid: Calendário T-03 + Timeline de Compromissos T-02 */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-7">
-          <CalendarMonth events={demoEvents} initialMonth="2026-10" />
+          <CalendarMonth events={events} />
         </div>
 
         <div className="lg:col-span-5 bg-card border border-border rounded-card p-4 sm:p-5 shadow-card">
@@ -62,7 +73,13 @@ export function AgendaPage() {
             <h3 className="text-sm font-bold text-text-primary">Próximos 30 Dias (T-02)</h3>
             <span className="text-xs text-text-muted">{filteredCommitments.length} eventos</span>
           </div>
-          <Timeline items={filteredCommitments} />
+          {filteredCommitments.length === 0 ? (
+            <div className="py-8 text-center text-xs text-text-muted">
+              Nenhum vencimento ou compromisso agendado para os próximos 30 dias.
+            </div>
+          ) : (
+            <Timeline items={filteredCommitments} />
+          )}
         </div>
       </div>
 

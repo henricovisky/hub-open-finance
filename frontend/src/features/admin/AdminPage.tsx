@@ -133,22 +133,25 @@ export function AdminPage() {
     }
   };
 
-  const auditEvents: TimelineItem[] = [
-    {
-      id: 'a1',
-      kind: 'SYNC_EVENT',
-      date: '2026-10-25',
-      title: 'Sincronização Noturna Automática',
-      categoryName: 'Todas as contas atualizadas com sucesso',
+  // 3. Busca Eventos de Auditoria / Sincronização
+  const { data: auditEvents = [] } = useQuery<TimelineItem[]>({
+    queryKey: ['admin-audit-events'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<any>('/sync/events');
+        const items = res.data || res || [];
+        return items.map((ev: any) => ({
+          id: ev.id,
+          kind: 'SYNC_EVENT',
+          date: ev.created_at?.split('T')[0] || '',
+          title: ev.event_type || 'Sincronização',
+          categoryName: ev.details || 'Atualização de dados via Pluggy',
+        }));
+      } catch {
+        return [];
+      }
     },
-    {
-      id: 'a2',
-      kind: 'SYNC_EVENT',
-      date: '2026-10-25',
-      title: 'Importação Sandbox Pluggy',
-      categoryName: 'Itens de teste importados',
-    },
-  ];
+  });
 
   return (
     <div className="space-y-6">
@@ -284,7 +287,13 @@ export function AdminPage() {
       {/* 3. Timeline de Auditoria Técnica (T-06) */}
       <div className="bg-card border border-border rounded-card p-4 sm:p-5 shadow-card space-y-3">
         <h2 className="text-sm font-bold text-text-primary">Histórico de Eventos & Sincronização (T-06)</h2>
-        <Timeline items={auditEvents} />
+        {auditEvents.length === 0 ? (
+          <div className="py-6 text-center text-xs text-text-muted">
+            Nenhum evento de sincronização registrado ainda.
+          </div>
+        ) : (
+          <Timeline items={auditEvents} />
+        )}
       </div>
     </div>
   );
