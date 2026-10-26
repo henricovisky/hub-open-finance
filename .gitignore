@@ -48,6 +48,10 @@ htmlcov/
 # Banco de Dados Local e Volumes Docker
 # ==========================================
 postgres_data/
+actual-data/*
+!actual-data/.gitkeep
+archive_custom_hub/frontend/node_modules/
+archive_custom_hub/backend/.venv/
 *.sqlite3
 *.db
 

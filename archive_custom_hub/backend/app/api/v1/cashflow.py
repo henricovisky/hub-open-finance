@@ -70,15 +70,20 @@ async def get_cashflow_series(
         if from_date and isinstance(from_date, date) and to_date and isinstance(to_date, date):
             dt_start = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
             dt_end = datetime.combine(to_date, datetime.max.time(), tzinfo=timezone.utc)
+        elif period and isinstance(period, str) and len(period) == 4 and period.isdigit():
+            # Visão Anual Completa (Ex: 2026 de Janeiro a Dezembro)
+            y = int(period)
+            dt_start = datetime(y, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            dt_end = datetime(y, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
         elif period and isinstance(period, str) and len(period.split("-")) == 2:
-            y, m = map(int, period.split("-"))
-            prev_start, _ = get_prev_months_range(y, m, num_months=5)
-            _, end_cur = get_month_range(y, m)
-            dt_start, dt_end = prev_start, end_cur
+            # Se especificado YYYY-MM na visão mensal, exibe o ano completo daquele período
+            y, _ = map(int, period.split("-"))
+            dt_start = datetime(y, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            dt_end = datetime(y, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
         else:
-            prev_start, _ = get_prev_months_range(now.year, now.month, num_months=5)
-            _, end_cur = get_month_range(now.year, now.month)
-            dt_start, dt_end = prev_start, end_cur
+            # Padrão da visão mensal: Ano corrente completo (Janeiro a Dezembro)
+            dt_start = datetime(now.year, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            dt_end = datetime(now.year, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
     elif granularity == "week":
         if from_date and isinstance(from_date, date) and to_date and isinstance(to_date, date):
             dt_start = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
@@ -88,7 +93,7 @@ async def get_cashflow_series(
             dt_start, dt_end = get_month_range(y, m)
         else:
             dt_end = datetime.combine(now.date(), datetime.max.time(), tzinfo=timezone.utc)
-            dt_start = dt_end - timedelta(weeks=8)
+            dt_start = dt_end - timedelta(weeks=12)
     else: # day
         if from_date and isinstance(from_date, date) and to_date and isinstance(to_date, date):
             dt_start = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
