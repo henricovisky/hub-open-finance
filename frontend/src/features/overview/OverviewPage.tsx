@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
@@ -22,9 +22,8 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   ShieldCheck,
-  CreditCard,
   Target,
-  Sparkles,
+  FileSpreadsheet,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -66,7 +65,7 @@ export function OverviewPage() {
     },
   });
 
-  // 3. Resumo de Categorias Orçado vs Realizado (Planilha)
+  // 3. Resumo de Categorias Orçado vs Realizado (Planilha Pessoal)
   const { data: categoriesData = [], isLoading: isCategoriesLoading } = useQuery({
     queryKey: ['categories-summary', context, period],
     queryFn: async () => {
@@ -79,12 +78,12 @@ export function OverviewPage() {
     },
   });
 
-  // 4. Últimas Transações Reais da Conta Corrente Nubank
+  // 4. Transações Reais da Conta Corrente Nubank
   const { data: txData, isLoading: isTxLoading } = useQuery({
     queryKey: ['recent-transactions', context],
     queryFn: async () => {
       try {
-        const res = await api.get<any>('/transactions', { context, page_size: 8 });
+        const res = await api.get<any>('/transactions', { context, page_size: 20 });
         return res.results || res.data || res.items || (Array.isArray(res) ? res : []);
       } catch {
         return [];
@@ -116,7 +115,16 @@ export function OverviewPage() {
       };
 
   const points = cashflowData?.data?.points || [];
-  const recentTransactions = Array.isArray(txData) ? txData.slice(0, 8) : [];
+  const transactions = Array.isArray(txData) ? txData : [];
+
+  // Mapeamento de CategoryId -> CategoryName
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, any>();
+    categoriesData.forEach((c: any) => {
+      map.set(c.id, c);
+    });
+    return map;
+  }, [categoriesData]);
 
   // Filtragem das categorias pelo agrupamento da planilha
   const essentialCategories = categoriesData.filter((c: any) => c.is_essential);
@@ -140,6 +148,16 @@ export function OverviewPage() {
 
   const nonEssentialBudgeted = nonEssentialCategories.reduce((acc: number, c: any) => acc + (parseFloat(c.budget_amount) || 0), 0);
   const nonEssentialSpent = nonEssentialCategories.reduce((acc: number, c: any) => acc + (parseFloat(c.current_amount) || 0), 0);
+
+  // Helper para detectar forma de pagamento baseada no texto
+  const getPaymentMethod = (tx: any) => {
+    const desc = (tx.description || '').toUpperCase();
+    if (desc.includes('PIX')) return 'PIX';
+    if (desc.includes('BOLETO') || desc.includes('PAGAMENTO')) return 'Boleto / TED';
+    if (desc.includes('DEBITO') || desc.includes('COMPRA NO DEBITO')) return 'Cartão de Débito';
+    if (desc.includes('TRANSFERENCIA') || desc.includes('TRANSF')) return 'Transferência';
+    return tx.type === 'INCOME' ? 'Crédito em C/C' : 'Débito em C/C';
+  };
 
   return (
     <div className="space-y-6">
@@ -231,7 +249,7 @@ export function OverviewPage() {
         />
       </div>
 
-      {/* Seção Principal: Tabela Orçado vs Realizado (Inspirada na Planilha) */}
+      {/* Seção Principal: Tabela Orçado vs Realizado (A estrutura exata da planilha modelo) */}
       <div className="bg-card border border-border rounded-card p-4 sm:p-5 shadow-card space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
           <div>
@@ -316,7 +334,7 @@ export function OverviewPage() {
           </div>
         </div>
 
-        {/* Tabela de Categorias */}
+        {/* Tabela de Categorias com Colunas Exatas da Planilha Modelo */}
         {isCategoriesLoading ? (
           <div className="py-12 text-center text-xs text-text-muted animate-pulse">
             Carregando categorias e orçamentos...
@@ -329,13 +347,15 @@ export function OverviewPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
-                <tr className="border-b border-border text-text-muted font-semibold">
-                  <th className="py-2.5 px-2">Categoria</th>
-                  <th className="py-2.5 px-2">Itens Incluídos</th>
-                  <th className="py-2.5 px-2 text-right">Orçado</th>
-                  <th className="py-2.5 px-2 text-right">Gasto Real</th>
-                  <th className="py-2.5 px-2 text-right">Diferença</th>
-                  <th className="py-2.5 px-2 w-36">Consumo</th>
+                <tr className="border-b border-border text-text-muted font-semibold bg-surface-2/30">
+                  <th className="py-2.5 px-3">Categoria</th>
+                  <th className="py-2.5 px-3">Itens Incluídos</th>
+                  <th className="py-2.5 px-3 text-right">Valor Orçado Total</th>
+                  <th className="py-2.5 px-3 text-right">Gasto Real</th>
+                  <th className="py-2.5 px-3 text-right">Diferença</th>
+                  <th className="py-2.5 px-3 text-right">% Orçamento</th>
+                  <th className="py-2.5 px-3 w-36">% Realizado</th>
+                  <th className="py-2.5 px-3 text-center">Tipo de Despesa</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
@@ -343,34 +363,26 @@ export function OverviewPage() {
                   const budgetNum = parseFloat(c.budget_amount) || 0;
                   const spentNum = parseFloat(c.current_amount) || 0;
                   const diffNum = parseFloat(c.difference) || 0;
-                  const percent = c.percentage_budget || (budgetNum > 0 ? (spentNum / budgetNum) * 100 : 0);
-                  const isOver = percent > 100;
-                  const isClose = percent >= 80 && !isOver;
+                  const pctOrcamento = totalBudgeted > 0 ? (budgetNum / totalBudgeted) * 100 : 0;
+                  const pctRealizado = budgetNum > 0 ? (spentNum / budgetNum) * 100 : 0;
+                  const isOver = pctRealizado > 100;
+                  const isClose = pctRealizado >= 80 && !isOver;
 
                   return (
                     <tr key={c.id} className="hover:bg-surface-2/40 transition-colors tabular-nums">
-                      <td className="py-2.5 px-2 font-semibold text-text-primary flex items-center gap-2">
+                      <td className="py-2.5 px-3 font-semibold text-text-primary whitespace-nowrap">
                         <span>{c.name}</span>
-                        {c.is_essential ? (
-                          <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20">
-                            Essencial
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-surface-2 text-text-muted">
-                            Não Essencial
-                          </span>
-                        )}
                       </td>
-                      <td className="py-2.5 px-2 text-text-muted max-w-[200px] truncate" title={c.included_items}>
+                      <td className="py-2.5 px-3 text-text-muted max-w-[220px] truncate" title={c.included_items}>
                         {c.included_items || '-'}
                       </td>
-                      <td className="py-2.5 px-2 text-right font-medium text-text-primary">
+                      <td className="py-2.5 px-3 text-right font-medium text-text-primary">
                         {formatMoney(budgetNum, hideValues)}
                       </td>
-                      <td className="py-2.5 px-2 text-right font-bold text-text-primary">
+                      <td className="py-2.5 px-3 text-right font-bold text-text-primary">
                         {formatMoney(spentNum, hideValues)}
                       </td>
-                      <td className="py-2.5 px-2 text-right font-semibold">
+                      <td className="py-2.5 px-3 text-right font-semibold">
                         <span
                           className={clsx(
                             'inline-block px-1.5 py-0.5 rounded text-[11px]',
@@ -383,11 +395,14 @@ export function OverviewPage() {
                           {formatMoney(diffNum, hideValues)}
                         </span>
                       </td>
-                      <td className="py-2.5 px-2">
+                      <td className="py-2.5 px-3 text-right text-text-muted font-medium">
+                        {pctOrcamento > 0 ? `${pctOrcamento.toFixed(0)}%` : '0%'}
+                      </td>
+                      <td className="py-2.5 px-3">
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-[10px]">
                             <span className={clsx('font-bold', isOver ? 'text-danger' : isClose ? 'text-warning' : 'text-text-muted')}>
-                              {percent.toFixed(0)}%
+                              {pctRealizado.toFixed(0)}%
                             </span>
                             {isOver && <AlertTriangle className="w-3 h-3 text-danger" />}
                           </div>
@@ -397,29 +412,44 @@ export function OverviewPage() {
                                 'h-full rounded-full transition-all duration-300',
                                 isOver ? 'bg-danger' : isClose ? 'bg-warning' : 'bg-primary'
                               )}
-                              style={{ width: `${Math.min(percent, 100)}%` }}
+                              style={{ width: `${Math.min(pctRealizado, 100)}%` }}
                             />
                           </div>
                         </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        {c.is_essential ? (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                            Essencial
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-surface-2 text-text-muted border border-border">
+                            Não Essencial
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-border font-bold text-text-primary tabular-nums bg-surface-2/30">
-                  <td className="py-3 px-2">💰 TOTAL GERAL</td>
-                  <td className="py-3 px-2 text-text-muted font-normal text-[11px]">Consolidado</td>
-                  <td className="py-3 px-2 text-right">{formatMoney(totalBudgeted, hideValues)}</td>
-                  <td className="py-3 px-2 text-right">{formatMoney(totalSpent, hideValues)}</td>
-                  <td className="py-3 px-2 text-right">
-                    <span className={clsx(totalDiff < 0 ? 'text-danger' : 'text-income')}>
+                <tr className="border-t-2 border-border font-bold text-text-primary tabular-nums bg-surface-2/40">
+                  <td className="py-3 px-3">💰 TOTAL GERAL</td>
+                  <td className="py-3 px-3 text-text-muted font-normal text-[11px]">Consolidado</td>
+                  <td className="py-3 px-3 text-right">{formatMoney(totalBudgeted, hideValues)}</td>
+                  <td className="py-3 px-3 text-right">{formatMoney(totalSpent, hideValues)}</td>
+                  <td className="py-3 px-3 text-right">
+                    <span className={clsx(totalDiff < 0 ? 'text-danger font-bold' : 'text-income')}>
                       {totalDiff > 0 ? '+' : ''}
                       {formatMoney(totalDiff, hideValues)}
                     </span>
                   </td>
-                  <td className="py-3 px-2 text-right font-bold text-primary">
+                  <td className="py-3 px-3 text-right text-text-muted font-medium">100%</td>
+                  <td className="py-3 px-3 text-right font-bold text-primary">
                     {totalPercent.toFixed(1)}%
+                  </td>
+                  <td className="py-3 px-3 text-center text-text-muted text-[11px] font-normal">
+                    Orçamento
                   </td>
                 </tr>
               </tfoot>
@@ -428,126 +458,135 @@ export function OverviewPage() {
         )}
       </div>
 
-      {/* Grid: Gráfico de Fluxo de Caixa (8 cols) + Extrato Recente Nubank (4 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Gráfico de Fluxo Diário */}
-        <div className="lg:col-span-7">
-          <ChartCard
-            title="Fluxo de Caixa da Conta Corrente (G-01)"
-            subtitle="Evolução diária de depósitos, despesas e resultado"
-            summaryValue={formatMoney(totals.net, hideValues)}
-            isLoading={isCashflowLoading}
-            action={
-              <button
-                type="button"
-                onClick={() => navigate('/fluxo')}
-                className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
-              >
-                <span>Ver completo</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-            }
+      {/* Gráfico de Fluxo de Caixa Mensal (G-01) */}
+      <ChartCard
+        title="Fluxo de Caixa da Conta Corrente (G-01)"
+        subtitle="Evolução diária de depósitos, despesas e resultado consolidado"
+        summaryValue={formatMoney(totals.net, hideValues)}
+        isLoading={isCashflowLoading}
+        action={
+          <button
+            type="button"
+            onClick={() => navigate('/fluxo')}
+            className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
           >
-            {points.length === 0 ? (
-              <div className="h-[280px] flex flex-col items-center justify-center text-xs text-text-muted">
-                <span>Nenhuma movimentação registrada no período.</span>
-                <span className="text-[11px] mt-1">Clique em "Sincronizar Nubank" para atualizar.</span>
-              </div>
-            ) : (
-              <FlowChart points={points} height="280px" />
-            )}
-          </ChartCard>
+            <span>Ver fluxo completo</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        }
+      >
+        {points.length === 0 ? (
+          <div className="h-[280px] flex flex-col items-center justify-center text-xs text-text-muted">
+            <span>Nenhuma movimentação registrada no período.</span>
+            <span className="text-[11px] mt-1">Clique em "Sincronizar Nubank" para atualizar.</span>
+          </div>
+        ) : (
+          <FlowChart points={points} height="280px" />
+        )}
+      </ChartCard>
+
+      {/* Tabela de Compras / Movimentações da Conta Nubank (Estilo Tabela Inferior da Planilha) */}
+      <div className="bg-card border border-border rounded-card p-4 sm:p-5 shadow-card space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-primary" />
+            <div>
+              <h2 className="text-base font-bold text-text-primary tracking-tight">
+                Compras & Movimentações — Nubank Conta Corrente
+              </h2>
+              <p className="text-xs text-text-muted">
+                Extrato detalhado e categorizado das transações bancárias reais
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/transacoes')}
+            className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 self-start sm:self-auto"
+          >
+            <span>Ver extrato completo</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        {/* Extrato Recente da Conta Nubank */}
-        <div className="lg:col-span-5">
-          <div className="bg-card border border-border rounded-card p-4 sm:p-5 shadow-card flex flex-col h-full justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between pb-3 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-bold text-text-primary">Extrato Recente Nubank</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/transacoes')}
-                  className="text-[11px] text-primary font-semibold hover:underline flex items-center gap-1"
-                >
-                  <span>Ver todas</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
+        {isTxLoading ? (
+          <div className="py-12 text-center text-xs text-text-muted animate-pulse">
+            Carregando movimentações do Nubank...
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="py-12 text-center text-xs text-text-muted">
+            Nenhuma movimentação encontrada na conta corrente.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="border-b border-border text-text-muted font-semibold bg-surface-2/30">
+                  <th className="py-2.5 px-3">Data</th>
+                  <th className="py-2.5 px-3">Descrição da Compra</th>
+                  <th className="py-2.5 px-3">Categoria</th>
+                  <th className="py-2.5 px-3 text-right">Valor</th>
+                  <th className="py-2.5 px-3 text-right">Forma de Pagamento</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {transactions.slice(0, 15).map((tx: any) => {
+                  const isIncome = tx.type === 'INCOME';
+                  const amtNum = Math.abs(parseFloat(tx.amount) || 0);
+                  const cat = tx.category_id ? categoryMap.get(tx.category_id) : null;
+                  const catName = cat ? cat.name : '❓ Outros';
 
-              {isTxLoading ? (
-                <div className="py-12 text-center text-xs text-text-muted animate-pulse">
-                  Carregando transações...
-                </div>
-              ) : recentTransactions.length === 0 ? (
-                <div className="py-12 text-center text-xs text-text-muted">
-                  Nenhuma transação encontrada na conta corrente.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {recentTransactions.map((tx: any) => {
-                    const isIncome = tx.type === 'INCOME';
-                    const amtNum = Math.abs(parseFloat(tx.amount) || 0);
-
-                    return (
-                      <div
-                        key={tx.id}
-                        className="flex items-center justify-between p-2 rounded-lg hover:bg-surface-2 transition-colors border border-border/40 text-xs"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                  return (
+                    <tr key={tx.id} className="hover:bg-surface-2/40 transition-colors tabular-nums">
+                      <td className="py-2.5 px-3 text-text-muted whitespace-nowrap">
+                        {formatDate(tx.date)}
+                      </td>
+                      <td className="py-2.5 px-3 font-medium text-text-primary max-w-[280px] truncate" title={tx.description}>
+                        <div className="flex items-center gap-2">
                           <div
                             className={clsx(
-                              'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0',
+                              'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[10px]',
                               isIncome ? 'bg-income-bg text-income' : 'bg-expense-bg text-expense'
                             )}
                           >
-                            {isIncome ? (
-                              <ArrowDownLeft className="w-3.5 h-3.5" />
-                            ) : (
-                              <ArrowUpRight className="w-3.5 h-3.5" />
-                            )}
+                            {isIncome ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
                           </div>
-                          <div className="min-w-0">
-                            <span className="font-medium text-text-primary block truncate" title={tx.description}>
-                              {tx.description}
-                            </span>
-                            <span className="text-[10px] text-text-muted">
-                              {formatDate(tx.date)}
-                            </span>
-                          </div>
+                          <span className="truncate">{tx.description}</span>
                         </div>
-
-                        <div className="text-right flex-shrink-0">
-                          <span
-                            className={clsx(
-                              'font-bold tabular-nums block',
-                              isIncome ? 'text-income' : 'text-text-primary'
-                            )}
-                          >
-                            {isIncome ? '+' : '-'} {formatMoney(amtNum, hideValues)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="pt-3 mt-3 border-t border-border flex justify-between items-center text-[11px] text-text-muted">
-              <span>Conta Corrente Nu Pagamentos</span>
-              <button
-                type="button"
-                onClick={() => navigate('/transacoes')}
-                className="text-primary font-semibold hover:underline"
-              >
-                Gerenciar Categorias &rarr;
-              </button>
-            </div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface-2 text-text-secondary border border-border">
+                          {catName}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold">
+                        <span className={clsx(isIncome ? 'text-income' : 'text-text-primary')}>
+                          {isIncome ? '+' : '-'} {formatMoney(amtNum, hideValues)}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-text-muted">
+                        <span className="inline-block px-2 py-0.5 rounded text-[11px] bg-surface-2/60">
+                          {getPaymentMethod(tx)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        )}
+
+        <div className="pt-2 flex justify-between items-center text-[11px] text-text-muted border-t border-border">
+          <span>Exibindo as 15 movimentações mais recentes da conta corrente</span>
+          <button
+            type="button"
+            onClick={() => navigate('/transacoes')}
+            className="text-primary font-semibold hover:underline"
+          >
+            Gerenciar e Recategorizar &rarr;
+          </button>
         </div>
       </div>
     </div>

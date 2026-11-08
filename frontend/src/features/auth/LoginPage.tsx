@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { Wallet, Lock, Mail, ArrowRight, ShieldCheck, User } from 'lucide-react';
+import { Wallet, Lock, Mail, ArrowRight } from 'lucide-react';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -28,12 +28,6 @@ export function LoginPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleFillDemo = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword(demoEmail.includes('admin') ? 'AdminPass123!Secure' : 'MemberPass123!Secure');
-    setError('');
   };
 
   return (
@@ -108,29 +102,6 @@ export function LoginPage() {
             )}
           </button>
         </form>
-
-        {/* Atalhos de Preenchimento para Desenvolvimento/Testes */}
-        <div className="mt-6 pt-5 border-t border-border">
-          <p className="text-[11px] text-text-muted text-center mb-2.5 font-medium">Acesso rápido de teste:</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleFillDemo('admin@exemplo.com')}
-              className="flex items-center justify-center gap-1.5 p-2 rounded-lg bg-surface-2 hover:bg-border text-[11px] font-semibold text-text-secondary transition-colors"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-              Admin
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFillDemo('membro@exemplo.com')}
-              className="flex items-center justify-center gap-1.5 p-2 rounded-lg bg-surface-2 hover:bg-border text-[11px] font-semibold text-text-secondary transition-colors"
-            >
-              <User className="w-3.5 h-3.5 text-text-muted" />
-              Membro
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
