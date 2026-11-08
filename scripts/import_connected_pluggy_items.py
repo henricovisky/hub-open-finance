@@ -70,7 +70,7 @@ async def import_items(item_ids):
                         conn = FinancialConnection(
                             owner_user_id=admin.id,
                             pluggy_item_id=item_id,
-                            connector_id=pluggy_item.connector_id,
+                            connector_id=(pluggy_item.connector.id if pluggy_item.connector else 0),
                             institution_name=inst_name,
                             status=ConnectionStatus.CONNECTED,
                             raw_status=pluggy_item.status,
