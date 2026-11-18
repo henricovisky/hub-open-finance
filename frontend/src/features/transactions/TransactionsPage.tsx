@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { DetailPanel } from '@/components/ui/DetailPanel';
+import { CategorySelector } from '@/components/ui/CategorySelector';
 import { Timeline, TimelineItem } from '@/components/timeline/Timeline';
 import { formatMoney } from '@/lib/format';
 import { formatDate } from '@/lib/dates';
@@ -36,6 +37,7 @@ export function TransactionsPage() {
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
   const [batchSelectedIds, setBatchSelectedIds] = useState<string[]>([]);
   const [batchCategory, setBatchCategory] = useState('');
+  const [applySimilarDetail, setApplySimilarDetail] = useState(true);
 
   const context = searchParams.get('context') || 'HOUSEHOLD';
 
@@ -300,11 +302,13 @@ export function TransactionsPage() {
                         <td className="py-2.5 px-3 font-medium text-text-primary max-w-xs truncate">
                           {tx.description}
                         </td>
-                        <td className="py-2.5 px-3">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-2 text-[11px] text-text-secondary border border-border">
-                            <Tag className="w-3 h-3 text-text-muted" />
-                            <span>{tx.category?.name || 'Não categorizada'}</span>
-                          </span>
+                        <td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
+                          <CategorySelector
+                            transactionId={tx.id}
+                            currentCategoryId={tx.category_id}
+                            currentCategoryName={tx.category?.name}
+                            transactionDescription={tx.description}
+                          />
                         </td>
                         <td className="py-2.5 px-3 text-text-muted whitespace-nowrap">
                           {tx.account?.name || 'Conta'}
@@ -383,16 +387,30 @@ export function TransactionsPage() {
 
             {/* Edição de Categoria */}
             <div>
-              <label className="block text-text-secondary font-semibold mb-1.5">
-                Categoria Financeira
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-text-secondary font-semibold">
+                  Categoria Financeira
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] text-text-muted cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={applySimilarDetail}
+                    onChange={(e) => setApplySimilarDetail(e.target.checked)}
+                    className="rounded border-border text-primary w-3.5 h-3.5"
+                  />
+                  <span>Aplicar para iguais</span>
+                </label>
+              </div>
               <select
                 value={selectedTx.category_id || ''}
                 onChange={(e) => {
                   const newCatId = e.target.value;
                   updateTxMutation.mutate({
                     id: selectedTx.id,
-                    data: { category_id: newCatId || null },
+                    data: {
+                      category_id: newCatId || null,
+                      apply_to_similar: applySimilarDetail,
+                    },
                   });
                 }}
                 className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-xs text-text-primary"

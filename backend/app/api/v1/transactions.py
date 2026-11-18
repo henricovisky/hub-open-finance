@@ -2,13 +2,13 @@ import uuid
 from datetime import date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_user
 from app.api.v1.accounts import get_authorized_account_ids
 from app.core.database import get_db_session
 from app.models.base import FinancialContext, UserRole
-from app.models.finance import Transaction, TransactionType
+from app.models.finance import Account, Transaction, TransactionType
 from app.models.user import AccountPermission, User
 from app.schemas.finance import (
     TransactionListResponse,
@@ -63,6 +63,9 @@ async def list_transactions(
         base_filter.append(Transaction.description.ilike(f"%{search.strip()}%"))
     if uncategorized_only:
         base_filter.append(Transaction.category_id.is_(None))
+
+    # Exclui automaticamente transações de contas ocultadas
+    base_filter.append(Transaction.account.has(Account.is_hidden.is_(False)))
 
     # Contagem total
     count_stmt = select(func.count(Transaction.id)).where(*base_filter)
@@ -150,8 +153,17 @@ async def update_transaction(
             )
 
     update_data = payload.model_dump(exclude_unset=True)
+    apply_similar = update_data.pop("apply_to_similar", False)
     for field, val in update_data.items():
         setattr(tx, field, val)
+
+    if payload.category_id is not None and apply_similar and tx.description:
+        # Aplica a mesma categoria a lançamentos passados/semelhantes com a mesma descrição
+        await db.execute(
+            update(Transaction)
+            .where(func.lower(Transaction.description) == tx.description.lower().strip())
+            .values(category_id=payload.category_id)
+        )
 
     await db.commit()
     await db.refresh(tx)

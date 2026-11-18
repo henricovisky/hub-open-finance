@@ -75,8 +75,12 @@ async def get_dashboard_overview(
     else:
         applied_context = "ALL"
 
-    # 1. Saldo Líquido Disponível
-    acc_filter = [Account.is_active == True, Account.type.in_([AccountType.BANK, AccountType.OTHER])]
+    # 1. Saldo Líquido Disponível (excluindo contas ocultas)
+    acc_filter = [
+        Account.is_active == True,
+        Account.is_hidden.is_(False),
+        Account.type.in_([AccountType.BANK, AccountType.OTHER]),
+    ]
     if authorized_ids is not None:
         acc_filter.append(Account.id.in_(authorized_ids))
     if applied_context != "ALL":
@@ -87,13 +91,14 @@ async def get_dashboard_overview(
     accounts = acc_res.scalars().all()
     liquid_balance = sum((a.current_balance or Decimal("0.00") for a in accounts), Decimal("0.00"))
 
-    # 2. Entradas e Saídas do Mês Corrente
+    # 2. Entradas e Saídas do Mês Corrente (excluindo contas ocultas)
     curr_start, curr_end = get_month_range(now.year, now.month)
     tx_filter = [
         Transaction.date >= curr_start,
         Transaction.date <= curr_end,
         Transaction.is_ignored_in_analytics == False,
         Transaction.is_internal_transfer == False,
+        Transaction.account.has(Account.is_hidden.is_(False)),
     ]
     if authorized_ids is not None:
         tx_filter.append(Transaction.account_id.in_(authorized_ids))
@@ -116,13 +121,14 @@ async def get_dashboard_overview(
 
     monthly_net = monthly_income - monthly_expenses
 
-    # 3. Médias Móveis dos 3 Meses Anteriores
+    # 3. Médias Móveis dos 3 Meses Anteriores (excluindo contas ocultas)
     prev_start, prev_end = get_prev_months_range(now.year, now.month, num_months=3)
     prev_filter = [
         Transaction.date >= prev_start,
         Transaction.date <= prev_end,
         Transaction.is_ignored_in_analytics == False,
         Transaction.is_internal_transfer == False,
+        Transaction.account.has(Account.is_hidden.is_(False)),
     ]
     if authorized_ids is not None:
         prev_filter.append(Transaction.account_id.in_(authorized_ids))
@@ -144,8 +150,11 @@ async def get_dashboard_overview(
     three_month_avg_income = round(prev_income_total / Decimal("3.0"), 2)
     three_month_avg_expenses = round(prev_expenses_total / Decimal("3.0"), 2)
 
-    # 4. Faturas de Cartão Pendentes
-    bill_filter = [Bill.status.in_(["OPEN", "CLOSED", "OVERDUE"])]
+    # 4. Faturas de Cartão Pendentes (excluindo contas ocultas)
+    bill_filter = [
+        Bill.status.in_(["OPEN", "CLOSED", "OVERDUE"]),
+        Bill.account.has(Account.is_hidden.is_(False)),
+    ]
     if authorized_ids is not None:
         bill_filter.append(Bill.account_id.in_(authorized_ids))
 
@@ -257,6 +266,7 @@ async def get_dashboard_cashflow(
             Transaction.date <= end_dt,
             Transaction.is_ignored_in_analytics == False,
             Transaction.is_internal_transfer == False,
+            Transaction.account.has(Account.is_hidden.is_(False)),
         ]
         if authorized_ids is not None:
             tx_filter.append(Transaction.account_id.in_(authorized_ids))
@@ -309,6 +319,7 @@ async def get_dashboard_categories(
         Transaction.type == TransactionType.EXPENSE,
         Transaction.is_ignored_in_analytics == False,
         Transaction.is_internal_transfer == False,
+        Transaction.account.has(Account.is_hidden.is_(False)),
     ]
     if authorized_ids is not None:
         tx_filter.append(Transaction.account_id.in_(authorized_ids))
@@ -326,6 +337,7 @@ async def get_dashboard_categories(
         Transaction.type == TransactionType.EXPENSE,
         Transaction.is_ignored_in_analytics == False,
         Transaction.is_internal_transfer == False,
+        Transaction.account.has(Account.is_hidden.is_(False)),
     ]
     if authorized_ids is not None:
         prev_filter.append(Transaction.account_id.in_(authorized_ids))

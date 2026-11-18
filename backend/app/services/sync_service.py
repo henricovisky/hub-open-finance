@@ -541,8 +541,8 @@ class SyncService:
         """
         snapshot_day = target_date or date.today()
 
-        # 1. Saldo em Contas (Bancárias)
-        acc_stmt = select(Account).where(Account.is_active == True)
+        # 1. Saldo em Contas (Bancárias - excluindo contas ocultas)
+        acc_stmt = select(Account).where(Account.is_active == True, Account.is_hidden.is_(False))
         acc_res = await db.execute(acc_stmt)
         accounts = acc_res.scalars().all()
 
@@ -560,7 +560,7 @@ class SyncService:
                 else:
                     cash_personal += bal
 
-        # 2. Posições de Investimentos
+        # 2. Posições de Investimentos (excluindo contas ocultas)
         inv_stmt = select(Investment).options(selectinload(Investment.account), selectinload(Investment.asset_class))
         inv_res = await db.execute(inv_stmt)
         investments = inv_res.scalars().all()
@@ -571,6 +571,8 @@ class SyncService:
         asset_class_totals: Dict[str, Tuple[str, Optional[uuid.UUID], Decimal]] = {}
 
         for inv in investments:
+            if inv.account and inv.account.is_hidden:
+                continue
             bal = inv.balance or Decimal("0.00")
             investment_balance += bal
 
@@ -595,7 +597,7 @@ class SyncService:
             curr_name, curr_id, curr_bal = asset_class_totals[ac_code]
             asset_class_totals[ac_code] = (curr_name, curr_id, curr_bal + bal)
 
-        # 3. Dívida de Cartões de Crédito (faturas OPEN ou CLOSED pendentes de pagamento)
+        # 3. Dívida de Cartões de Crédito (excluindo contas ocultas)
         bill_stmt = select(Bill).options(selectinload(Bill.account)).where(
             Bill.status.in_(["OPEN", "CLOSED", "OVERDUE"])
         )
@@ -607,6 +609,8 @@ class SyncService:
         debt_personal = Decimal("0.00")
 
         for b in bills:
+            if b.account and b.account.is_hidden:
+                continue
             tot = b.total_amount or Decimal("0.00")
             paid = b.paid_amount or Decimal("0.00")
             remaining = max(Decimal("0.00"), tot - paid)

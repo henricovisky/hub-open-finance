@@ -50,6 +50,7 @@ export function AppRouter() {
         <Route path="transacoes" element={<TransactionsPage />} />
         <Route path="cartoes" element={<CardsPage />} />
         <Route path="categorias" element={<CategoriesPage />} />
+        <Route path="categories" element={<Navigate to="/categorias" replace />} />
         <Route path="orcamento" element={<BudgetsPage />} />
         <Route path="metas" element={<GoalsPage />} />
         <Route path="agenda" element={<AgendaPage />} />

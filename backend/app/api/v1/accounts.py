@@ -32,6 +32,7 @@ async def list_accounts(
     context: Optional[FinancialContext] = None,
     account_type: Optional[AccountType] = None,
     include_inactive: bool = False,
+    include_hidden: bool = False,
     current_user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -39,11 +40,15 @@ async def list_accounts(
     Lista contas bancárias e cartões com isolamento rigoroso por perfil:
     - ADMIN: Acesso a todas as contas.
     - MEMBER: Acesso restrito exclusivamente às contas autorizadas na matriz de visibilidade.
+    Por padrão exclui contas ocultas (is_hidden == False), a menos que include_hidden=True.
     """
     stmt = select(Account).options(selectinload(Account.card))
 
     if not include_inactive:
         stmt = stmt.where(Account.is_active.is_(True))
+
+    if not include_hidden:
+        stmt = stmt.where(Account.is_hidden.is_(False))
 
     if context and context != FinancialContext.CONSOLIDATED:
         stmt = stmt.where(Account.owner_context == context)
@@ -122,7 +127,10 @@ async def update_account(
         )
     if payload.is_active is not None:
         account.is_active = payload.is_active
+    if payload.is_hidden is not None:
+        account.is_hidden = payload.is_hidden
 
     await db.commit()
-    await db.refresh(account)
+    stmt_reload = select(Account).where(Account.id == account.id).options(selectinload(Account.card))
+    account = (await db.execute(stmt_reload)).scalar_one()
     return account

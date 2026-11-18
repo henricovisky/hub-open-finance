@@ -22,6 +22,8 @@ import {
   User as UserIcon,
   Tag,
   ArrowRight,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -44,6 +46,7 @@ interface AccountItem {
   credit_limit?: number;
   owner_context: 'HOUSEHOLD' | 'PERSONAL' | 'INVESTMENT' | 'WORK' | 'OTHER';
   is_active: boolean;
+  is_hidden?: boolean;
   last_synced_at?: string;
 }
 
@@ -83,12 +86,12 @@ export function AdminPage() {
     },
   });
 
-  // 2. Contas Bancárias & Cartões para Gerenciamento de Tags
+  // 2. Contas Bancárias & Cartões para Gerenciamento de Tags e Visibilidade (inclui ocultas)
   const { data: accounts = [], isLoading: isAccountsLoading } = useQuery<AccountItem[]>({
     queryKey: ['admin-accounts'],
     queryFn: async () => {
       try {
-        const res = await api.get<any>('/accounts?include_inactive=true');
+        const res = await api.get<any>('/accounts?include_inactive=true&include_hidden=true');
         return res.data || res || [];
       } catch {
         return [];
@@ -168,6 +171,33 @@ export function AdminPage() {
     },
     onError: (err: any) => {
       setAccountUpdateStatus(`Erro ao atualizar tag: ${err.message || 'Falha na requisição'}`);
+    },
+  });
+
+  // 6.1. Ocultar / Mostrar Conta Bancária ou Cartão
+  const toggleAccountHiddenMutation = useMutation({
+    mutationFn: async ({ accountId, is_hidden }: { accountId: string; is_hidden: boolean }) => {
+      return api.patch(`/accounts/${accountId}`, { is_hidden });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['overview'] });
+      queryClient.invalidateQueries({ queryKey: ['cashflow-series'] });
+      queryClient.invalidateQueries({ queryKey: ['cashflow'] });
+      queryClient.invalidateQueries({ queryKey: ['cash-flow'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['recent-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
+      queryClient.invalidateQueries({ queryKey: ['wealth'] });
+      queryClient.invalidateQueries({ queryKey: ['categories-summary'] });
+      setAccountUpdateStatus(
+        variables.is_hidden ? 'Conta ocultada dos saldos e relatórios.' : 'Conta reexibida com sucesso!'
+      );
+      setTimeout(() => setAccountUpdateStatus(null), 3000);
+    },
+    onError: (err: any) => {
+      setAccountUpdateStatus(`Erro ao alterar visibilidade: ${err.message || 'Falha na requisição'}`);
     },
   });
 
@@ -477,10 +507,14 @@ export function AdminPage() {
             {accounts.map((acc) => {
               const isCredit = acc.type === 'CREDIT';
               const isInvestment = acc.type === 'INVESTMENT';
+              const isHidden = !!acc.is_hidden;
               return (
                 <div
                   key={acc.id}
-                  className="p-3.5 bg-surface rounded-xl border border-border hover:border-border/80 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors"
+                  className={clsx(
+                    'p-3.5 bg-surface rounded-xl border border-border hover:border-border/80 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all',
+                    isHidden && 'opacity-60 bg-surface-2/40'
+                  )}
                 >
                   {/* Identificação da Conta */}
                   <div className="flex items-start gap-3">
@@ -494,16 +528,52 @@ export function AdminPage() {
                       )}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-xs text-text-primary">{acc.name}</span>
                         <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-surface-2 text-text-muted">
                           {acc.type === 'BANK' ? 'Conta Corrente' : acc.type === 'CREDIT' ? 'Cartão' : acc.type === 'INVESTMENT' ? 'Investimento' : acc.type}
                         </span>
+                        {isHidden && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-warning-bg text-warning border border-warning/30">
+                            Oculta
+                          </span>
+                        )}
                         {!acc.is_active && (
                           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-danger-bg text-danger">
                             Inativa
                           </span>
                         )}
+
+                        {/* Botão toggle Ocultar / Mostrar */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleAccountHiddenMutation.mutate({
+                              accountId: acc.id,
+                              is_hidden: !isHidden,
+                            })
+                          }
+                          disabled={toggleAccountHiddenMutation.isPending}
+                          className={clsx(
+                            'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border transition-colors',
+                            isHidden
+                              ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
+                              : 'bg-surface-2 border-border text-text-muted hover:text-text-primary hover:border-border-strong'
+                          )}
+                          title={isHidden ? 'Reexibir conta nos saldos e gráficos' : 'Ocultar conta de saldos e gráficos'}
+                        >
+                          {isHidden ? (
+                            <>
+                              <Eye className="w-3 h-3 text-primary" />
+                              <span>Mostrar</span>
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="w-3 h-3 text-text-muted" />
+                              <span>Ocultar</span>
+                            </>
+                          )}
+                        </button>
                       </div>
                       <div className="flex items-center gap-3 text-[11px] text-text-muted mt-0.5">
                         <span>
@@ -570,8 +640,8 @@ export function AdminPage() {
           <Lock className="w-4 h-4 text-text-muted" />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
+        <div className="w-full overflow-x-auto -mx-2 px-2">
+          <table className="w-full min-w-[540px] text-xs text-left">
             <thead className="text-text-muted border-b border-border">
               <tr>
                 <th className="py-2">Usuário</th>

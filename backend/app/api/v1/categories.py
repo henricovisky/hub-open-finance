@@ -10,7 +10,7 @@ from app.api.v1.accounts import get_authorized_account_ids
 from app.api.v1.dashboard import get_month_range, get_prev_months_range
 from app.core.database import get_db_session
 from app.models.base import FinancialContext, UserRole
-from app.models.finance import Category, Transaction, TransactionType
+from app.models.finance import Account, Category, Transaction, TransactionType
 from app.models.user import User
 from app.schemas.finance import CategoryCreate, CategoryResponse
 
@@ -54,13 +54,14 @@ async def get_categories_summary(
     cat_res = await db.execute(cat_stmt)
     all_categories = cat_res.scalars().all()
 
-    # 2. Filtros base de transações
+    # 2. Filtros base de transações (excluindo transações de contas ocultas)
     cur_filters = [
         Transaction.date >= cur_start,
         Transaction.date <= cur_end,
         Transaction.type == TransactionType.EXPENSE,
         Transaction.is_internal_transfer == False,
         Transaction.is_ignored_in_analytics == False,
+        Transaction.account.has(Account.is_hidden.is_(False)),
     ]
     prev_filters = [
         Transaction.date >= prev_start,
@@ -68,6 +69,7 @@ async def get_categories_summary(
         Transaction.type == TransactionType.EXPENSE,
         Transaction.is_internal_transfer == False,
         Transaction.is_ignored_in_analytics == False,
+        Transaction.account.has(Account.is_hidden.is_(False)),
     ]
 
     if authorized_acc_ids is not None:
@@ -162,19 +164,30 @@ async def get_categories_summary(
 
 @router.get("", response_model=List[CategoryResponse])
 async def list_categories(
-    context: Optional[FinancialContext] = None,
+    context: Optional[str] = Query(None),
     current_user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """
     Lista categorias de despesas e receitas.
+    Retorna todas as categorias disponíveis sem filtrar indevidamente quando o contexto é vazio.
     """
     stmt = select(Category).order_by(Category.is_essential.desc(), Category.name.asc())
 
+    parsed_ctx: Optional[FinancialContext] = None
+    if context and context.strip() and context.upper() not in ("ALL", "CONSOLIDATED", ""):
+        try:
+            parsed_ctx = FinancialContext(context.upper())
+        except ValueError:
+            parsed_ctx = None
+
     if current_user.role != UserRole.ADMIN:
-        stmt = stmt.where(Category.context == FinancialContext.HOUSEHOLD)
-    elif context and context != FinancialContext.CONSOLIDATED:
-        stmt = stmt.where(Category.context == context)
+        if parsed_ctx:
+            stmt = stmt.where(Category.context == parsed_ctx)
+        else:
+            stmt = stmt.where(Category.context != FinancialContext.PERSONAL)
+    elif parsed_ctx:
+        stmt = stmt.where(Category.context == parsed_ctx)
 
     result = await db.execute(stmt)
     categories = list(result.scalars().all())
@@ -194,6 +207,8 @@ async def create_category(
             detail="Apenas o Administrador pode criar categorias do contexto Pessoal.",
         )
 
+    budget_amt = payload.budget_amount or payload.budget_limit or Decimal("0.00")
+
     cat = Category(
         id=uuid.uuid4(),
         name=payload.name.strip(),
@@ -201,7 +216,7 @@ async def create_category(
         icon=payload.icon,
         color=payload.color,
         parent_id=payload.parent_id,
-        budget_amount=payload.budget_amount or Decimal("0.00"),
+        budget_amount=budget_amt,
         is_essential=payload.is_essential,
         included_items=payload.included_items,
     )
@@ -209,3 +224,42 @@ async def create_category(
     await db.commit()
     await db.refresh(cat)
     return CategoryResponse.model_validate(cat)
+
+
+@router.post("/seed-defaults", status_code=status.HTTP_201_CREATED)
+async def seed_default_categories(
+    current_user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Cria categorias padrão brasileiras caso não existam.
+    """
+    from app.core.init_db import DEFAULT_SPREADSHEET_CATEGORIES
+
+    cat_stmt = select(Category)
+    cat_res = await db.execute(cat_stmt)
+    existing_cats = {c.name: c for c in cat_res.scalars().all()}
+
+    created = []
+    for cat_def in DEFAULT_SPREADSHEET_CATEGORIES:
+        cat_name = cat_def["name"]
+        if cat_name not in existing_cats:
+            cat = Category(
+                id=uuid.uuid4(),
+                name=cat_name,
+                context=FinancialContext.HOUSEHOLD,
+                icon=cat_def.get("icon"),
+                color=cat_def.get("color"),
+                budget_amount=cat_def.get("budget_amount", Decimal("0.00")),
+                is_essential=cat_def.get("is_essential", True),
+                included_items=cat_def.get("included_items"),
+            )
+            db.add(cat)
+            created.append(cat_name)
+
+    await db.commit()
+    return {
+        "message": "Categorias padrão inicializadas com sucesso.",
+        "created_count": len(created),
+        "created": created,
+    }

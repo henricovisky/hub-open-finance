@@ -32,7 +32,11 @@ async def list_cards(
     stmt = (
         select(Account)
         .options(selectinload(Account.card))
-        .where(Account.type == AccountType.CREDIT, Account.is_active == True)
+        .where(
+            Account.type == AccountType.CREDIT,
+            Account.is_active == True,
+            Account.is_hidden.is_(False),
+        )
     )
     if authorized_acc_ids is not None:
         if not authorized_acc_ids:
@@ -93,11 +97,15 @@ async def get_card_limit_usage(
     """
     authorized_acc_ids = await get_authorized_account_ids(db, current_user)
 
-    # Busca a conta ou o cartão
+    # Busca a conta ou o cartão (não oculto)
     stmt = (
         select(Account)
         .options(selectinload(Account.card))
-        .where(Account.id == id, Account.type == AccountType.CREDIT)
+        .where(
+            Account.id == id,
+            Account.type == AccountType.CREDIT,
+            Account.is_hidden.is_(False),
+        )
     )
     result = await db.execute(stmt)
     account = result.scalar_one_or_none()

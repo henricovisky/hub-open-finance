@@ -47,7 +47,7 @@ export function ContextSwitcher({ className }: { className?: string }) {
             type="button"
             onClick={() => setContext(opt.id)}
             className={clsx(
-              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-150',
+              'shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-150',
               isActive
                 ? 'bg-surface text-primary shadow-subtle font-semibold'
                 : 'text-text-secondary hover:text-text-primary'

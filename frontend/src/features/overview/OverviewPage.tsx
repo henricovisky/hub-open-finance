@@ -7,6 +7,7 @@ import { ChartCard } from '@/components/ui/ChartCard';
 import { InsightBanner } from '@/components/ui/InsightBanner';
 import { DataStatusBadge } from '@/components/ui/DataStatusBadge';
 import { FlowChart } from '@/components/charts/FlowChart';
+import { CategorySelector } from '@/components/ui/CategorySelector';
 import { formatMoney } from '@/lib/format';
 import { formatDate } from '@/lib/dates';
 import { useTheme } from '@/app/providers/ThemeProvider';
@@ -104,6 +105,18 @@ export function OverviewPage() {
       queryClient.invalidateQueries({ queryKey: ['recent-transactions'] });
       setSyncSuccessMsg(`Sincronizado com sucesso! ${data.records_read || 0} lançamentos verificados.`);
       setTimeout(() => setSyncSuccessMsg(null), 5000);
+    },
+  });
+
+  // Mutação para criar categorias padrão quando a lista estiver vazia
+  const seedCategoriesMutation = useMutation({
+    mutationFn: async () => {
+      return api.post('/categories/seed-defaults');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['categories-list'] });
+      queryClient.invalidateQueries({ queryKey: ['overview'] });
     },
   });
 
@@ -247,14 +260,14 @@ export function OverviewPage() {
           </div>
 
           {/* Seletor de visualização (Todas / Essenciais / Não Essenciais) */}
-          <div className="inline-flex items-center gap-1 bg-surface-2 border border-border p-0.5 rounded-lg text-xs font-semibold self-start sm:self-auto">
+          <div className="grid grid-cols-3 gap-1.5 bg-surface-2 border border-border p-1 rounded-xl text-xs font-semibold w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setActiveBudgetTab('ALL')}
               className={clsx(
-                'px-2.5 py-1 rounded-md transition-colors',
+                'px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap text-xs text-center truncate',
                 activeBudgetTab === 'ALL'
-                  ? 'bg-card text-text-primary shadow-xs'
+                  ? 'bg-card text-text-primary shadow-xs font-bold'
                   : 'text-text-muted hover:text-text-primary'
               )}
             >
@@ -264,9 +277,9 @@ export function OverviewPage() {
               type="button"
               onClick={() => setActiveBudgetTab('ESSENTIAL')}
               className={clsx(
-                'px-2.5 py-1 rounded-md transition-colors',
+                'px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap text-xs text-center truncate',
                 activeBudgetTab === 'ESSENTIAL'
-                  ? 'bg-card text-primary shadow-xs'
+                  ? 'bg-card text-primary shadow-xs font-bold'
                   : 'text-text-muted hover:text-text-primary'
               )}
             >
@@ -276,9 +289,9 @@ export function OverviewPage() {
               type="button"
               onClick={() => setActiveBudgetTab('NON_ESSENTIAL')}
               className={clsx(
-                'px-2.5 py-1 rounded-md transition-colors',
+                'px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap text-xs text-center truncate',
                 activeBudgetTab === 'NON_ESSENTIAL'
-                  ? 'bg-card text-warning shadow-xs'
+                  ? 'bg-card text-warning shadow-xs font-bold'
                   : 'text-text-muted hover:text-text-primary'
               )}
             >
@@ -322,8 +335,34 @@ export function OverviewPage() {
             Carregando categorias e orçamentos...
           </div>
         ) : displayedCategories.length === 0 ? (
-          <div className="py-12 text-center text-xs text-text-muted">
-            Nenhuma categoria encontrada.
+          <div className="py-10 px-4 flex flex-col items-center justify-center text-center space-y-3 bg-surface-2/30 rounded-xl border border-dashed border-border">
+            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-text-primary">Nenhuma categoria encontrada</h3>
+              <p className="text-xs text-text-muted max-w-sm">
+                Inicialize com as categorias padrão de orçamento brasileiro ou acesse a página de categorias.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => seedCategoriesMutation.mutate()}
+                disabled={seedCategoriesMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-primary text-white text-xs font-semibold rounded-xl hover:bg-primary-hover shadow-subtle disabled:opacity-50 transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{seedCategoriesMutation.isPending ? 'Criando categorias...' : 'Criar categorias padrão'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/categorias')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-surface border border-border text-text-primary text-xs font-semibold rounded-xl hover:bg-surface-2 transition-colors"
+              >
+                <span>Gerenciar categorias</span>
+              </button>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -495,12 +534,12 @@ export function OverviewPage() {
                     return (
                       <div
                         key={tx.id}
-                        className="flex items-center justify-between p-2 rounded-lg hover:bg-surface-2 transition-colors border border-border/40 text-xs"
+                        className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-2 transition-colors border border-border/40 text-xs gap-2"
                       >
-                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           <div
                             className={clsx(
-                              'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0',
+                              'w-7 h-7 rounded-full flex items-center justify-center shrink-0',
                               isIncome ? 'bg-income-bg text-income' : 'bg-expense-bg text-expense'
                             )}
                           >
@@ -510,20 +549,28 @@ export function OverviewPage() {
                               <ArrowUpRight className="w-3.5 h-3.5" />
                             )}
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <span className="font-medium text-text-primary block truncate" title={tx.description}>
                               {tx.description}
                             </span>
-                            <span className="text-[10px] text-text-muted">
-                              {formatDate(tx.date)}
-                            </span>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="text-[10px] text-text-muted shrink-0">
+                                {formatDate(tx.date)}
+                              </span>
+                              <CategorySelector
+                                transactionId={tx.id}
+                                currentCategoryId={tx.category_id}
+                                currentCategoryName={tx.category?.name}
+                                transactionDescription={tx.description}
+                              />
+                            </div>
                           </div>
                         </div>
 
-                        <div className="text-right flex-shrink-0">
+                        <div className="text-right shrink-0 tabular-nums">
                           <span
                             className={clsx(
-                              'font-bold tabular-nums block',
+                              'font-bold tabular-nums block text-xs sm:text-sm',
                               isIncome ? 'text-income' : 'text-text-primary'
                             )}
                           >

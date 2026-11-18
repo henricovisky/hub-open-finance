@@ -17,7 +17,7 @@ router = APIRouter(prefix="/cashflow", tags=["cashflow"])
 
 
 async def _check_stale_accounts(db: AsyncSession, authorized_acc_ids: Optional[List] = None) -> tuple[bool, Optional[datetime]]:
-    stmt = select(func.max(Account.last_synced_at))
+    stmt = select(func.max(Account.last_synced_at)).where(Account.is_hidden.is_(False))
     if authorized_acc_ids is not None:
         stmt = stmt.where(Account.id.in_(authorized_acc_ids))
     res = await db.execute(stmt)
@@ -99,12 +99,13 @@ async def get_cashflow_series(
         else:
             dt_start, dt_end = get_month_range(now.year, now.month)
 
-    # Filtro base de transações válidas (sem transferências internas e não ignoradas)
+    # Filtro base de transações válidas (sem transferências internas, não ignoradas e excluindo contas ocultas)
     filters = [
         Transaction.date >= dt_start,
         Transaction.date <= dt_end,
         Transaction.is_internal_transfer == False,
         Transaction.is_ignored_in_analytics == False,
+        Transaction.account.has(Account.is_hidden.is_(False)),
     ]
 
     if authorized_acc_ids is not None:

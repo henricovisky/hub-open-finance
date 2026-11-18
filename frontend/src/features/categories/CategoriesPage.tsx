@@ -1,20 +1,27 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { ChartCard } from '@/components/ui/ChartCard';
 import { CategoryBars } from '@/components/charts/CategoryBars';
 import { formatMoney } from '@/lib/format';
 import { useTheme } from '@/app/providers/ThemeProvider';
-import { ArrowUpRight, ArrowDownRight, Tag } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Tag, Plus, Sparkles, X } from 'lucide-react';
 import clsx from 'clsx';
 
 export function CategoriesPage() {
   const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   const { hideValues } = useTheme();
   const context = searchParams.get('context') || 'HOUSEHOLD';
   const period = searchParams.get('period') || undefined;
   const [chartViewCount, setChartViewCount] = useState<number | 'all'>(10);
+
+  // Estado para criação rápida de categoria
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [budgetLimit, setBudgetLimit] = useState('');
+  const [isEssential, setIsEssential] = useState(true);
 
   const { data: categories = [], isLoading } = useQuery({
     queryKey: ['categories-full', context, period],
@@ -25,6 +32,37 @@ export function CategoriesPage() {
       } catch {
         return [];
       }
+    },
+  });
+
+  const createCategoryMutation = useMutation({
+    mutationFn: async () => {
+      return api.post('/categories', {
+        name: name.trim(),
+        budget_limit: budgetLimit ? parseFloat(budgetLimit) : 0,
+        is_essential: isEssential,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories-full'] });
+      queryClient.invalidateQueries({ queryKey: ['categories-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['categories-list'] });
+      queryClient.invalidateQueries({ queryKey: ['overview'] });
+      setIsCreateOpen(false);
+      setName('');
+      setBudgetLimit('');
+    },
+  });
+
+  const seedCategoriesMutation = useMutation({
+    mutationFn: async () => {
+      return api.post('/categories/seed-defaults');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories-full'] });
+      queryClient.invalidateQueries({ queryKey: ['categories-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['categories-list'] });
+      queryClient.invalidateQueries({ queryKey: ['overview'] });
     },
   });
 
@@ -51,31 +89,42 @@ export function CategoriesPage() {
           <p className="text-xs text-text-muted mt-0.5">Distribuição das despesas e comparação com o padrão dos últimos 3 meses</p>
         </div>
 
-        {/* Seletor de visualização do gráfico */}
-        {categories.length > 8 && (
-          <div className="inline-flex items-center p-0.5 bg-surface-2 border border-border rounded-lg text-xs font-semibold self-start sm:self-auto">
-            {[
-              { id: 8, label: 'Top 8' },
-              { id: 10, label: 'Top 10' },
-              { id: 15, label: 'Top 15' },
-              { id: 'all', label: `Todas (${categories.length})` },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setChartViewCount(opt.id as any)}
-                className={clsx(
-                  'px-3 py-1.5 rounded-md transition-colors',
-                  chartViewCount === opt.id
-                    ? 'bg-surface text-primary shadow-subtle font-bold'
-                    : 'text-text-muted hover:text-text-primary'
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {/* Seletor de visualização do gráfico */}
+          {categories.length > 8 && (
+            <div className="inline-flex items-center p-0.5 bg-surface-2 border border-border rounded-lg text-xs font-semibold">
+              {[
+                { id: 8, label: 'Top 8' },
+                { id: 10, label: 'Top 10' },
+                { id: 15, label: 'Top 15' },
+                { id: 'all', label: `Todas (${categories.length})` },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setChartViewCount(opt.id as any)}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-md transition-colors',
+                    chartViewCount === opt.id
+                      ? 'bg-surface text-primary shadow-subtle font-bold'
+                      : 'text-text-muted hover:text-text-primary'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-hover shadow-subtle transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Nova Categoria</span>
+          </button>
+        </div>
       </div>
 
       {/* Gráfico G-05 de Barras com Média Ampliado e Nítido */}
@@ -216,6 +265,106 @@ export function CategoriesPage() {
           </div>
         )}
       </div>
+      {/* Modal de Criação de Categoria */}
+      {isCreateOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in"
+          onClick={() => setIsCreateOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-surface border border-border rounded-2xl p-5 shadow-elevated space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <h3 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                <Tag className="w-4 h-4 text-primary" />
+                <span>Nova Categoria</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(false)}
+                className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-text-secondary font-semibold mb-1">Nome da Categoria</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: Supermercado, Pet, etc."
+                  className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-text-primary focus:outline-hidden focus:border-primary"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-text-secondary font-semibold mb-1">Meta de Orçamento Mensal (R$)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={budgetLimit}
+                  onChange={(e) => setBudgetLimit(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-text-primary focus:outline-hidden focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-text-secondary font-semibold mb-1">Classificação</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEssential(true)}
+                    className={clsx(
+                      'p-2 rounded-xl border text-center font-semibold transition-all',
+                      isEssential
+                        ? 'bg-primary-light border-primary text-primary'
+                        : 'bg-surface-2 border-border text-text-muted hover:text-text-primary'
+                    )}
+                  >
+                    Essencial
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEssential(false)}
+                    className={clsx(
+                      'p-2 rounded-xl border text-center font-semibold transition-all',
+                      !isEssential
+                        ? 'bg-warning-bg border-warning text-warning'
+                        : 'bg-surface-2 border-border text-text-muted hover:text-text-primary'
+                    )}
+                  >
+                    Estilo de Vida
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(false)}
+                  className="px-3 py-1.5 rounded-xl border border-border text-text-secondary hover:text-text-primary"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={!name.trim() || createCategoryMutation.isPending}
+                  onClick={() => createCategoryMutation.mutate()}
+                  className="px-4 py-1.5 bg-primary text-white font-semibold rounded-xl hover:bg-primary-hover disabled:opacity-50 transition-colors shadow-subtle"
+                >
+                  {createCategoryMutation.isPending ? 'Salvando...' : 'Salvar Categoria'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
